@@ -1,0 +1,6 @@
+{
+  "name": "Amharic Study Workspace",
+  "description": "Full-stack Amharic audio transcription, translation, and AI chatbot study workspace using Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
