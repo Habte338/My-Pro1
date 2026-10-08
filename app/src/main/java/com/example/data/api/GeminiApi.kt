@@ -27,7 +27,8 @@ data class Content(
 @JsonClass(generateAdapter = true)
 data class Part(
     @Json(name = "text") val text: String? = null,
-    @Json(name = "inlineData") val inlineData: InlineData? = null
+    @Json(name = "inlineData") val inlineData: InlineData? = null,
+    @Json(name = "thought") val thought: Boolean? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -45,7 +46,18 @@ data class GenerationConfig(
 @JsonClass(generateAdapter = true)
 data class GeminiResponse(
     @Json(name = "candidates") val candidates: List<Candidate>?
-)
+) {
+    fun extractText(): String? {
+        val parts = candidates?.firstOrNull()?.content?.parts ?: return null
+        val nonThoughtParts = parts.filter { it.thought != true }
+        val text = if (nonThoughtParts.isNotEmpty()) {
+            nonThoughtParts.mapNotNull { it.text }.joinToString("\n").trim()
+        } else {
+            parts.mapNotNull { it.text }.joinToString("\n").trim()
+        }
+        return text.ifEmpty { null }
+    }
+}
 
 @JsonClass(generateAdapter = true)
 data class Candidate(
@@ -68,7 +80,7 @@ object RetrofitClient {
         .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = HttpLoggingInterceptor.Level.BASIC
         })
         .build()
 

@@ -2,8 +2,14 @@ package com.example
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -25,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -43,6 +50,8 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -61,6 +70,30 @@ import com.example.ui.WorkspaceViewModel
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+// Unified clipboard copy helper ensuring both Compose and Android system clipboard compatibility
+fun copyTextToClipboard(
+    context: Context,
+    clipboardManager: androidx.compose.ui.platform.ClipboardManager,
+    label: String,
+    text: String
+) {
+    if (text.isBlank()) {
+        Toast.makeText(context, "Nothing to copy", Toast.LENGTH_SHORT).show()
+        return
+    }
+    try {
+        clipboardManager.setText(AnnotatedString(text))
+    } catch (_: Exception) {}
+
+    try {
+        val sysClipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val clip = ClipData.newPlainText(label, text)
+        sysClipboard?.setPrimaryClip(clip)
+    } catch (_: Exception) {}
+
+    Toast.makeText(context, "$label Copied to Clipboard! 📋", Toast.LENGTH_SHORT).show()
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -1351,7 +1384,7 @@ fun sharePdfReport(context: Context, session: TranscriptionSession, decryptedAmh
         
         val contentUri = androidx.core.content.FileProvider.getUriForFile(
             context,
-            "com.example.provider",
+            "${context.packageName}.provider",
             file
         )
         
@@ -1386,7 +1419,7 @@ fun shareTextFile(context: Context, session: TranscriptionSession, decryptedAmha
         file.writeText(content)
         val contentUri = androidx.core.content.FileProvider.getUriForFile(
             context,
-            "com.example.provider",
+            "${context.packageName}.provider",
             file
         )
         
@@ -1476,7 +1509,7 @@ fun HistoryWorkspace(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = session.title,
                                     color = MaterialTheme.colorScheme.onSurface,
@@ -1490,18 +1523,54 @@ fun HistoryWorkspace(
                                 )
                             }
 
-                            Row {
-                                IconButton(onClick = {
-                                    clipboardManager.setText(AnnotatedString("${decryptedAmharic}\n\nTranslation:\n${decryptedEnglish}"))
-                                    Toast.makeText(context, "Note Copied to Clipboard!", Toast.LENGTH_SHORT).show()
-                                }) {
-                                    Text("📋", fontSize = 16.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Button(
+                                    onClick = {
+                                        copyTextToClipboard(
+                                            context,
+                                            clipboardManager,
+                                            "Full Session",
+                                            "${session.title}\n\n[Amharic / Ge'ez]:\n$decryptedAmharic\n\n[Translation]:\n$decryptedEnglish"
+                                        )
+                                    },
+                                    modifier = Modifier.height(34.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                    shape = RoundedCornerShape(17.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Text("📋 Copy All", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                 }
-                                IconButton(onClick = { viewModel.deleteSession(session.id) }) {
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                IconButton(
+                                    onClick = {
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_SUBJECT, session.title)
+                                            putExtra(Intent.EXTRA_TEXT, "${session.title}\n\n$decryptedAmharic\n\nTranslation:\n$decryptedEnglish")
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Share Study Note"))
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Share,
+                                        contentDescription = "Share Session",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { viewModel.deleteSession(session.id) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
                                         contentDescription = "Delete Session",
-                                        tint = Color(0xFFEF4444)
+                                        tint = Color(0xFFEF4444),
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }
@@ -1511,81 +1580,129 @@ fun HistoryWorkspace(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp),
+                                .padding(vertical = 6.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Button(
+                            OutlinedButton(
                                 onClick = { sharePdfReport(context, session, decryptedAmharic, decryptedEnglish) },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(30.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                shape = RoundedCornerShape(15.dp)
+                                    .height(32.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                             ) {
-                                Text("📄 Export PDF", fontSize = 10.sp, color = Color.White)
+                                Text("📄 Export PDF", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                             }
 
-                            Button(
+                            OutlinedButton(
                                 onClick = { shareTextFile(context, session, decryptedAmharic, decryptedEnglish) },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(30.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                                shape = RoundedCornerShape(15.dp)
+                                    .height(32.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                             ) {
-                                Text("💾 Export .TXT", fontSize = 10.sp, color = Color.White)
+                                Text("💾 Export .TXT", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        // Amharic Container Box (Soft violet tinted card)
+                        // Amharic Container Box (Soft violet tinted card with explicit copy button and tap-to-copy)
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.04f)), RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+                                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)), RoundedCornerShape(14.dp))
                                 .padding(12.dp)
                         ) {
                             Column {
-                                Text(
-                                    text = "የአማርኛ ግልባጭ (Amharic Transcription)",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = decryptedAmharic,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 13.sp
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "የአማርኛ ግልባጭ (Amharic Transcription)",
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    FilledTonalButton(
+                                        onClick = {
+                                            copyTextToClipboard(
+                                                context,
+                                                clipboardManager,
+                                                "Amharic Script",
+                                                decryptedAmharic
+                                            )
+                                        },
+                                        modifier = Modifier.height(28.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                        shape = RoundedCornerShape(14.dp)
+                                    ) {
+                                        Text("📋 Copy Amharic", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                SelectionContainer {
+                                    Text(
+                                        text = decryptedAmharic,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 13.sp,
+                                        lineHeight = 18.sp
+                                    )
+                                }
                             }
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // English Container Box (Soft tinted card)
+                        // English Container Box (Soft tinted card with explicit copy button and tap-to-copy)
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.04f)), RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)), RoundedCornerShape(14.dp))
                                 .padding(12.dp)
                         ) {
                             Column {
-                                Text(
-                                    text = "English Translation",
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = decryptedEnglish,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 13.sp
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "English Translation",
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    FilledTonalButton(
+                                        onClick = {
+                                            copyTextToClipboard(
+                                                context,
+                                                clipboardManager,
+                                                "English Translation",
+                                                decryptedEnglish
+                                            )
+                                        },
+                                        modifier = Modifier.height(28.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                        shape = RoundedCornerShape(14.dp)
+                                    ) {
+                                        Text("📋 Copy Translation", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                SelectionContainer {
+                                    Text(
+                                        text = decryptedEnglish,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 13.sp,
+                                        lineHeight = 18.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -1622,29 +1739,80 @@ fun OcrWorkspaceScreen(viewModel: WorkspaceViewModel) {
 
     var noteTitleInput by remember { mutableStateOf("") }
 
-    // Set up Photo File Provider Uri for Camera capturing!
-    val tempFile = remember {
-        java.io.File(context.cacheDir, "camera_capture_ocr.jpg").apply {
-            deleteOnExit()
-        }
-    }
-    val tempUri = remember {
-        androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "com.example.provider",
-            tempFile
-        )
-    }
+    var activeCameraUri by remember { mutableStateOf<Uri?>(null) }
 
     // Camera picture taker launcher
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
-        if (success) {
-            viewModel.updateSelectedOcrImageUri(tempUri)
+        if (success && activeCameraUri != null) {
+            viewModel.updateSelectedOcrImageUri(activeCameraUri!!)
             Toast.makeText(context, "Photo captured! Ready to scan.", Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(context, "Camera photo capture cancelled.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Camera photo capture cancelled or failed.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Camera permission request launcher
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            try {
+                val photoFile = java.io.File(context.cacheDir, "camera_capture_ocr_${System.currentTimeMillis()}.jpg")
+                photoFile.parentFile?.mkdirs()
+                if (!photoFile.exists()) {
+                    photoFile.createNewFile()
+                }
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.provider",
+                    photoFile
+                )
+                activeCameraUri = uri
+                cameraLauncher.launch(uri)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Camera error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(context, "Camera permission is required to capture documents.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun launchCameraFlow() {
+        val hasCamPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasCamPermission) {
+            try {
+                val photoFile = java.io.File(context.cacheDir, "camera_capture_ocr_${System.currentTimeMillis()}.jpg")
+                photoFile.parentFile?.mkdirs()
+                if (!photoFile.exists()) {
+                    photoFile.createNewFile()
+                }
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.provider",
+                    photoFile
+                )
+                activeCameraUri = uri
+                cameraLauncher.launch(uri)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Camera error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    // Generic file fallback picker
+    val genericImagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.updateSelectedOcrImageUri(uri)
+            Toast.makeText(context, "Image selected! Ready to scan.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1652,7 +1820,10 @@ fun OcrWorkspaceScreen(viewModel: WorkspaceViewModel) {
     val singleImageLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
-        uri?.let { viewModel.updateSelectedOcrImageUri(it) }
+        if (uri != null) {
+            viewModel.updateSelectedOcrImageUri(uri)
+            Toast.makeText(context, "Image selected! Ready to scan.", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // Pick multiple visual media launch (Batch processing queue)
@@ -1661,6 +1832,22 @@ fun OcrWorkspaceScreen(viewModel: WorkspaceViewModel) {
     ) { uris ->
         if (!uris.isNullOrEmpty()) {
             viewModel.addImageToBatchQueue(uris)
+        }
+    }
+
+    // Fast image preview decoder for UI feedback
+    val previewBitmap = remember(selectedOcrUri) {
+        selectedOcrUri?.let { uri ->
+            try {
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    val options = BitmapFactory.Options().apply {
+                        inSampleSize = 2
+                    }
+                    BitmapFactory.decodeStream(stream, null, options)
+                }
+            } catch (_: Exception) {
+                null
+            }
         }
     }
 
@@ -1737,37 +1924,59 @@ fun OcrWorkspaceScreen(viewModel: WorkspaceViewModel) {
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Picker and Camera launch buttons
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Button(
-                        onClick = { cameraLauncher.launch(tempUri) },
+                        onClick = { launchCameraFlow() },
                         modifier = Modifier
                             .weight(1f)
                             .height(38.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("📸 Take Photo", fontSize = 11.sp, maxLines = 1)
+                        Text("📸 Camera", fontSize = 10.sp, maxLines = 1)
                     }
 
                     Button(
-                        onClick = { singleImageLauncher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                        onClick = {
+                            try {
+                                singleImageLauncher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            } catch (_: Exception) {
+                                genericImagePickerLauncher.launch("image/*")
+                            }
+                        },
                         modifier = Modifier
                             .weight(1f)
                             .height(38.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("🏞️ Pick Gallery", fontSize = 11.sp, maxLines = 1)
+                        Text("🏞️ Gallery", fontSize = 10.sp, maxLines = 1)
                     }
 
-                    OutlinedButton(
-                        onClick = { batchImagesLauncher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    FilledTonalButton(
+                        onClick = { viewModel.loadSampleOcrDocument(context) },
                         modifier = Modifier
                             .weight(1.1f)
                             .height(38.dp),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("📚 Add Multi", fontSize = 11.sp, maxLines = 1)
+                        Text("📄 Sample Doc", fontSize = 10.sp, maxLines = 1)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                batchImagesLauncher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            } catch (_: Exception) {
+                                genericImagePickerLauncher.launch("image/*")
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(0.9f)
+                            .height(38.dp),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("📚 Batch", fontSize = 10.sp, maxLines = 1)
                     }
                 }
 
@@ -1805,26 +2014,60 @@ fun OcrWorkspaceScreen(viewModel: WorkspaceViewModel) {
 
                 // Selected single image preview and Scan Button
                 if (selectedOcrUri != null) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
-                        Text("📄 Image Selected", fontSize = 11.sp, modifier = Modifier.weight(1f))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Button(
-                            onClick = { viewModel.triggerImageOcr(context) },
-                            modifier = Modifier.height(30.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
-                            shape = RoundedCornerShape(15.dp)
-                        ) {
-                            if (transcriptionLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(12.dp), color = Color.White)
-                            } else {
-                                Text("Scan Script", fontSize = 10.sp, color = Color.White)
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("📄 Document Image Ready for Scan", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                TextButton(
+                                    onClick = { viewModel.updateSelectedOcrImageUri(null) },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Text("✕ Remove", fontSize = 11.sp, color = Color(0xFFEF4444))
+                                }
+                            }
+
+                            if (previewBitmap != null) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                androidx.compose.foundation.Image(
+                                    bitmap = previewBitmap.asImageBitmap(),
+                                    contentDescription = "Selected document preview",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(150.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color.Black.copy(alpha = 0.05f)),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Button(
+                                onClick = { viewModel.triggerImageOcr(context) },
+                                enabled = !transcriptionLoading,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                if (transcriptionLoading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Scanning & Transcribing Script...", fontSize = 12.sp, color = Color.White)
+                                } else {
+                                    Text("🔍 Scan Document with Gemini OCR", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
                             }
                         }
                     }
@@ -1953,32 +2196,54 @@ fun OcrWorkspaceScreen(viewModel: WorkspaceViewModel) {
                         .background(MaterialTheme.colorScheme.primary)
                 )
                 Column(modifier = Modifier.padding(16.dp).weight(1f)) {
-                    Text(
-                        text = "OCR / Transcription Original Script (ጽሑፍ)",
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "OCR / Transcription Original Script (ጽሑፍ)",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        IconButton(
+                            onClick = {
+                                copyTextToClipboard(
+                                    context,
+                                    clipboardManager,
+                                    "Original Script",
+                                    activeTranscription
+                                )
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Text("📋", fontSize = 14.sp)
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    OutlinedTextField(
-                        value = activeTranscription,
-                        onValueChange = { viewModel.updateActiveTranscriptionText(it) },
-                        placeholder = { Text("Recognized script appears here. Edit to modify results directly if needed.", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 12.sp) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(100.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
+                    SelectionContainer {
+                        OutlinedTextField(
+                            value = activeTranscription,
+                            onValueChange = { viewModel.updateActiveTranscriptionText(it) },
+                            placeholder = { Text("Recognized script appears here. Edit to modify results directly if needed.", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 12.sp) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(100.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -2020,12 +2285,14 @@ fun OcrWorkspaceScreen(viewModel: WorkspaceViewModel) {
 
                     IconButton(
                         onClick = {
-                            if (activeTranslation.isNotBlank()) {
-                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(activeTranslation))
-                                Toast.makeText(context, "Translation Copied!", Toast.LENGTH_SHORT).show()
-                            }
+                            copyTextToClipboard(
+                                context,
+                                clipboardManager,
+                                "Translation",
+                                activeTranslation
+                            )
                         },
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(28.dp)
                     ) {
                         Text("📋", fontSize = 14.sp)
                     }
@@ -2033,23 +2300,25 @@ fun OcrWorkspaceScreen(viewModel: WorkspaceViewModel) {
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                OutlinedTextField(
-                    value = activeTranslation,
-                    onValueChange = { viewModel.updateActiveTranslationText(it) },
-                    placeholder = { Text("Translation output appears here.", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 12.sp) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(90.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
+                SelectionContainer {
+                    OutlinedTextField(
+                        value = activeTranslation,
+                        onValueChange = { viewModel.updateActiveTranslationText(it) },
+                        placeholder = { Text("Translation output appears here.", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 12.sp) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(90.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
             }
         }
 

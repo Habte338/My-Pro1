@@ -96,21 +96,35 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
 
         return try {
             val response = RetrofitClient.service.generateContent(apiKey, request)
-            var jsonText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+            var jsonText = response.extractText()
             if (jsonText != null) {
                 var cleanJson = jsonText.trim()
                 if (cleanJson.startsWith("```")) {
                     cleanJson = cleanJson.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
                 }
-                val langRegex = "\"originalLanguage\"\\s*:\\s*\"([^\"]+)\"".toRegex()
-                val transRegex = "\"transcription\"\\s*:\\s*\"([^\"]+)\"".toRegex()
-                val translatRegex = "\"translation\"\\s*:\\s*\"([^\"]+)\"".toRegex()
-                
-                val lang = langRegex.find(cleanJson)?.groupValues?.get(1) ?: "Detected Spoken Language"
-                val trans = transRegex.find(cleanJson)?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"") ?: "Failed to transcribe spoken audio."
-                val translation = translatRegex.find(cleanJson)?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"") ?: "Same"
-                
-                OcrResult(originalLanguage = lang, transcription = trans, translation = translation)
+                try {
+                    val jsonObj = org.json.JSONObject(cleanJson)
+                    val lang = jsonObj.optString("originalLanguage", "Detected Spoken Language")
+                    val trans = jsonObj.optString("transcription", "")
+                    val translation = jsonObj.optString("translation", "Same")
+                    if (trans.isNotBlank()) {
+                        OcrResult(originalLanguage = lang, transcription = trans, translation = translation)
+                    } else {
+                        OcrResult(originalLanguage = lang, transcription = cleanJson, translation = translation)
+                    }
+                } catch (_: Exception) {
+                    val langRegex = "\"originalLanguage\"\\s*:\\s*\"([^\"]+)\"".toRegex()
+                    val transRegex = "\"transcription\"\\s*:\\s*\"([\\s\\S]*?)\"\\s*,\\s*\"translation\"".toRegex()
+                    val translatRegex = "\"translation\"\\s*:\\s*\"([\\s\\S]*?)\"".toRegex()
+                    
+                    val lang = langRegex.find(cleanJson)?.groupValues?.get(1) ?: "Detected Spoken Language"
+                    val trans = transRegex.find(cleanJson)?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"")
+                        ?: cleanJson
+                    val translation = translatRegex.find(cleanJson)?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"")
+                        ?: if (translateTo != "None" && translateTo.lowercase() != "same") "Translation available" else "Same"
+                    
+                    OcrResult(originalLanguage = lang, transcription = trans, translation = translation)
+                }
             } else {
                 OcrResult(error = "Voice transcription returned an empty response.")
             }
@@ -154,7 +168,7 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
         )
 
         val response = RetrofitClient.service.generateContent(apiKey, request)
-        return response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+        return response.extractText()
             ?: "Transcription failed. No text returned from Gemini."
     }
 
@@ -175,7 +189,7 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
         )
 
         val response = RetrofitClient.service.generateContent(apiKey, request)
-        return response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+        return response.extractText()
             ?: "Translation failed."
     }
 
@@ -204,7 +218,7 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
         )
 
         val response = RetrofitClient.service.generateContent(apiKey, request)
-        return response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+        return response.extractText()
             ?: "Translation failed."
     }
 
@@ -250,21 +264,37 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
 
         return try {
             val response = RetrofitClient.service.generateContent(apiKey, request)
-            var jsonText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+            val jsonText = response.extractText()
             if (jsonText != null) {
                 var cleanJson = jsonText.trim()
                 if (cleanJson.startsWith("```")) {
                     cleanJson = cleanJson.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
                 }
-                val langRegex = "\"originalLanguage\"\\s*:\\s*\"([^\"]+)\"".toRegex()
-                val transRegex = "\"transcription\"\\s*:\\s*\"([^\"]+)\"".toRegex()
-                val translatRegex = "\"translation\"\\s*:\\s*\"([^\"]+)\"".toRegex()
                 
-                val lang = langRegex.find(cleanJson)?.groupValues?.get(1) ?: "Detected Ethiopian Language"
-                val trans = transRegex.find(cleanJson)?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"") ?: "Failed to extract printed/handwritten text."
-                val translation = translatRegex.find(cleanJson)?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"") ?: "Same"
-                
-                OcrResult(originalLanguage = lang, transcription = trans, translation = translation)
+                try {
+                    val jsonObj = org.json.JSONObject(cleanJson)
+                    val lang = jsonObj.optString("originalLanguage", "Detected Ethiopian Language")
+                    val trans = jsonObj.optString("transcription", "")
+                    val translation = jsonObj.optString("translation", "Same")
+                    if (trans.isNotBlank()) {
+                        OcrResult(originalLanguage = lang, transcription = trans, translation = translation)
+                    } else {
+                        OcrResult(originalLanguage = lang, transcription = cleanJson, translation = translation)
+                    }
+                } catch (_: Exception) {
+                    // Fallback to regex or direct text if model returned non-standard JSON
+                    val langRegex = "\"originalLanguage\"\\s*:\\s*\"([^\"]+)\"".toRegex()
+                    val transRegex = "\"transcription\"\\s*:\\s*\"([\\s\\S]*?)\"\\s*,\\s*\"translation\"".toRegex()
+                    val translatRegex = "\"translation\"\\s*:\\s*\"([\\s\\S]*?)\"".toRegex()
+                    
+                    val lang = langRegex.find(cleanJson)?.groupValues?.get(1) ?: "Detected Ethiopian Language"
+                    val trans = transRegex.find(cleanJson)?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"")
+                        ?: cleanJson
+                    val translation = translatRegex.find(cleanJson)?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"")
+                        ?: if (translateTo != "None" && translateTo.lowercase() != "same") "Translation available via Translate button" else "Same"
+                    
+                    OcrResult(originalLanguage = lang, transcription = trans, translation = translation)
+                }
             } else {
                 OcrResult(error = "OCR returned an empty response. Verify picture readability.")
             }
@@ -279,26 +309,43 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
             return "Error: API Key is missing. Configure it in the AI Studio Secrets panel."
         }
 
-        // Map ChatMessage entity to Gemini Content model
+        // Map ChatMessage entity to Gemini Content model with alternating turn sanitization
         val mappedContents = mutableListOf<Content>()
-        
-        // Let's add chat history
-        history.forEach { msg ->
-            mappedContents.add(
-                Content(
-                    role = msg.role,
-                    parts = listOf(Part(text = msg.text))
-                )
-            )
+        var lastRole: String? = null
+
+        for (msg in history) {
+            val text = msg.text.trim()
+            if (text.isBlank() || text.startsWith("Error:") || text.startsWith("Connection Error:")) {
+                continue
+            }
+            val role = if (msg.role == "user") "user" else "model"
+            if (role == lastRole && mappedContents.isNotEmpty()) {
+                val lastIdx = mappedContents.lastIndex
+                val prev = mappedContents[lastIdx]
+                val prevText = prev.parts.firstOrNull()?.text ?: ""
+                mappedContents[lastIdx] = Content(role = role, parts = listOf(Part(text = "$prevText\n$text")))
+            } else {
+                mappedContents.add(Content(role = role, parts = listOf(Part(text = text))))
+                lastRole = role
+            }
         }
 
         // Add current user message
-        mappedContents.add(
-            Content(
-                role = "user",
-                parts = listOf(Part(text = currentMessage))
-            )
-        )
+        if (lastRole == "user" && mappedContents.isNotEmpty()) {
+            val lastIdx = mappedContents.lastIndex
+            val prev = mappedContents[lastIdx]
+            val prevText = prev.parts.firstOrNull()?.text ?: ""
+            if (!prevText.contains(currentMessage.trim())) {
+                mappedContents[lastIdx] = Content(role = "user", parts = listOf(Part(text = "$prevText\n${currentMessage.trim()}")))
+            }
+        } else {
+            mappedContents.add(Content(role = "user", parts = listOf(Part(text = currentMessage.trim()))))
+        }
+
+        // Remove any leading model turns (Gemini conversation must start with user turn)
+        while (mappedContents.isNotEmpty() && mappedContents.first().role != "user") {
+            mappedContents.removeAt(0)
+        }
 
         val systemInstruction = Content(
             parts = listOf(
@@ -314,7 +361,7 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
         )
 
         val response = RetrofitClient.service.generateContent(apiKey, request)
-        val plainText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+        val plainText = response.extractText()
         return plainText?.replace("*", "") ?: "I'm sorry, I couldn't reach my servers right now."
     }
 }

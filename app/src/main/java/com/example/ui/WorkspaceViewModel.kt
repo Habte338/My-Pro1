@@ -187,11 +187,79 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
         return input
     }
 
-    // Helper to copy URI to cache File
+    // Helper to copy URI to cache File with image optimization and orientation correction
     private fun copyUriToTempFile(uri: android.net.Uri, context: android.content.Context, outputName: String): File? {
         return try {
             val contentResolver = context.contentResolver
             val tempFile = File(context.cacheDir, outputName)
+            
+            val isImage = outputName.endsWith(".jpg", ignoreCase = true) || 
+                          outputName.endsWith(".png", ignoreCase = true) ||
+                          outputName.endsWith(".jpeg", ignoreCase = true)
+            
+            if (isImage) {
+                // Read EXIF orientation
+                var rotationDegrees = 0
+                try {
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        val exif = android.media.ExifInterface(stream)
+                        val orientation = exif.getAttributeInt(
+                            android.media.ExifInterface.TAG_ORIENTATION,
+                            android.media.ExifInterface.ORIENTATION_NORMAL
+                        )
+                        rotationDegrees = when (orientation) {
+                            android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90
+                            android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180
+                            android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                            else -> 0
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                // Measure dimensions
+                val options = android.graphics.BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
+                }
+                contentResolver.openInputStream(uri)?.use { stream ->
+                    android.graphics.BitmapFactory.decodeStream(stream, null, options)
+                }
+
+                val maxDimension = 1600
+                var inSampleSize = 1
+                if (options.outHeight > maxDimension || options.outWidth > maxDimension) {
+                    val halfHeight = options.outHeight / 2
+                    val halfWidth = options.outWidth / 2
+                    while ((halfHeight / inSampleSize) >= maxDimension || (halfWidth / inSampleSize) >= maxDimension) {
+                        inSampleSize *= 2
+                    }
+                }
+
+                // Decode sampled bitmap
+                val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+                    this.inSampleSize = inSampleSize
+                }
+                var bitmap: android.graphics.Bitmap? = null
+                contentResolver.openInputStream(uri)?.use { stream ->
+                    bitmap = android.graphics.BitmapFactory.decodeStream(stream, null, decodeOptions)
+                }
+
+                if (bitmap != null) {
+                    var finalBitmap = bitmap!!
+                    if (rotationDegrees != 0) {
+                        val matrix = android.graphics.Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+                        finalBitmap = android.graphics.Bitmap.createBitmap(
+                            finalBitmap, 0, 0, finalBitmap.width, finalBitmap.height, matrix, true
+                        )
+                    }
+
+                    tempFile.outputStream().use { outStream ->
+                        finalBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, outStream)
+                    }
+                    if (tempFile.exists() && tempFile.length() > 0) return tempFile
+                }
+            }
+
+            // Fallback direct stream copy for audio or uncompressed files
             contentResolver.openInputStream(uri)?.use { inputStream ->
                 tempFile.outputStream().use { outputStream ->
                     inputStream.copyTo(outputStream)
@@ -380,6 +448,81 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun loadSampleOcrDocument(context: android.content.Context) {
+        viewModelScope.launch {
+            try {
+                val width = 800
+                val height = 600
+                val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+                val canvas = android.graphics.Canvas(bitmap)
+                
+                // Document paper background
+                val bgPaint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.rgb(253, 252, 248)
+                }
+                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
+
+                // Header border
+                val borderPaint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.rgb(220, 215, 205)
+                    style = android.graphics.Paint.Style.STROKE
+                    strokeWidth = 4f
+                }
+                canvas.drawRect(20f, 20f, width - 20f, height - 20f, borderPaint)
+
+                // Title banner
+                val bannerPaint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.rgb(40, 90, 70)
+                }
+                canvas.drawRect(30f, 30f, width - 30f, 110f, bannerPaint)
+
+                val titlePaint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.WHITE
+                    textSize = 34f
+                    isAntiAlias = true
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                }
+                canvas.drawText("የአማርኛ የጥናት ሰነድ (Amharic Study Document)", 60f, 82f, titlePaint)
+
+                // Body text in Amharic script
+                val textPaint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.rgb(30, 30, 30)
+                    textSize = 28f
+                    isAntiAlias = true
+                }
+
+                val lines = listOf(
+                    "ሰላም ጤና ይስጥልኝ! እንኳን ወደ አማርኛ ቋንቋ ጥናት መድረክ በደህና መጡ ።",
+                    "",
+                    "ይህ ሰነድ ለኦሲአር (OCR) የምስል ጽሑፍ መለያ የተዘጋጀ ናሙና ነው ።",
+                    "• ፊደል ፩: ሀ ሁ ሂ ሃ ሄ ህ ሆ",
+                    "• ፊደል ፪: ለ ሉ ሊ ላ ሌ ል ሎ",
+                    "• ፊደል ፫: ሐ ሑ ሒ ሓ ሔ ሕ ሖ",
+                    "",
+                    "ትምህርት ለሕይወት ብርሃን እና መመሪያ ነው። በየቀኑ አዳዲስ ቃላትን ይማሩ ።"
+                )
+
+                var y = 170f
+                for (line in lines) {
+                    canvas.drawText(line, 50f, y, textPaint)
+                    y += 44f
+                }
+
+                val sampleFile = File(context.cacheDir, "sample_amharic_doc.jpg")
+                sampleFile.outputStream().use { out ->
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, out)
+                }
+
+                if (sampleFile.exists() && sampleFile.length() > 0) {
+                    _selectedOcrImageUri.value = android.net.Uri.fromFile(sampleFile)
+                    _statusMessage.value = "Sample Amharic Document loaded! Tap 'Scan Document with Gemini OCR' to scan."
+                }
+            } catch (e: Exception) {
+                _statusMessage.value = "Error preparing sample document: ${e.message}"
+            }
+        }
+    }
+
     fun updateChatInput(text: String) {
         _chatInputText.value = text
     }
@@ -494,10 +637,33 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
 
-        // If the transcription text was set by simulated demo, we can bypass the empty payload REST call or proceed.
-        // Let's provide a real backend path, but if it is simulated text we keep it if the user wants!
-        if (file.name == "simulated_audio.mp4" && _activeTranscriptionText.value.isNotBlank() && !_activeTranscriptionText.value.startsWith("Transcribing")) {
-            _statusMessage.value = "Simulated transcription generated!"
+        // If simulated demo recording, perform translation and complete state
+        if (file.name == "simulated_audio.mp4") {
+            viewModelScope.launch {
+                _transcriptionLoading.value = true
+                _statusMessage.value = "Processing demo transcription & translating..."
+                try {
+                    val text = _activeTranscriptionText.value.ifBlank {
+                        "ሰላም ፣ ይህ የአማርኛ ድምፅ መቅረጫ የጥናት ቦታ ፕሮቶታይፕ ነው ።"
+                    }
+                    _activeTranscriptionText.value = text
+                    val target = _selectedTargetLang.value
+                    if (target != "None" && !_isOfflineMode.value) {
+                        val trans = withContext(Dispatchers.IO) {
+                            repository.translateEthiopianText(text, "Amharic", target)
+                        }
+                        _activeTranslationText.value = trans
+                    } else {
+                        _activeTranslationText.value = "Greetings, this is an Amharic voice recorder study workspace prototype."
+                    }
+                    _statusMessage.value = "Demo transcription & translation ready!"
+                } catch (e: Exception) {
+                    _activeTranslationText.value = "Greetings, this is an Amharic voice recorder study workspace prototype."
+                    _statusMessage.value = "Demo transcription loaded!"
+                } finally {
+                    _transcriptionLoading.value = false
+                }
+            }
             return
         }
 
