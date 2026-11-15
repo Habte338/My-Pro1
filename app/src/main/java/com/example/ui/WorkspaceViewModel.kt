@@ -143,7 +143,7 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     private val _isOfflineMode = MutableStateFlow(false)
     val isOfflineMode: StateFlow<Boolean> = _isOfflineMode.asStateFlow()
 
-    private val _isLocalEncryptionActive = MutableStateFlow(false)
+    private val _isLocalEncryptionActive = MutableStateFlow(true)
     val isLocalEncryptionActive: StateFlow<Boolean> = _isLocalEncryptionActive.asStateFlow()
 
     private val _selectedSourceLang = MutableStateFlow("Auto-Detect")
@@ -865,6 +865,77 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     // BYOK (Bring Your Own Key) management actions
+    fun saveAndEncryptByokKey(
+        provider: ByokProvider,
+        rawApiKey: String,
+        nickname: String,
+        modelId: String
+    ) {
+        val cleanKey = rawApiKey.trim()
+        if (cleanKey.isEmpty()) {
+            _byokFeedbackMessage.value = false to "API key is required."
+            return
+        }
+        val cleanModel = modelId.trim()
+        if (provider != ByokProvider.GEMINI && cleanModel.isEmpty()) {
+            _byokFeedbackMessage.value = false to "Please specify a Model ID for ${provider.displayName}."
+            return
+        }
+
+        viewModelScope.launch {
+            _isByokValidating.value = true
+            _byokFeedbackMessage.value = null
+            try {
+                val saved = withContext(Dispatchers.IO) {
+                    byokKeyManager.saveValidatedKey(provider, cleanKey, nickname, cleanModel)
+                }
+                _byokFeedbackMessage.value = true to "Encrypted and saved '${saved.nickname}' (${saved.maskedKey}) via Android KeyStore AES-256-GCM."
+                _statusMessage.value = "BYOK key '${saved.nickname}' encrypted & active."
+            } catch (e: Exception) {
+                val sanitized = (e.message ?: "Encryption error").replace(cleanKey, "[REDACTED]")
+                _byokFeedbackMessage.value = false to "Failed to encrypt key: $sanitized"
+            } finally {
+                _isByokValidating.value = false
+            }
+        }
+    }
+
+    fun verifySavedByokKey(keyId: String) {
+        viewModelScope.launch {
+            _isByokValidating.value = true
+            _byokFeedbackMessage.value = null
+            var rawKeyForRedaction = ""
+            try {
+                val config = withContext(Dispatchers.IO) {
+                    byokKeyManager.getDecryptedConfigById(keyId)
+                }
+                if (config == null) {
+                    _byokFeedbackMessage.value = false to "Unable to decrypt saved key for verification."
+                    return@launch
+                }
+                rawKeyForRedaction = config.apiKey
+                val result = withContext(Dispatchers.IO) {
+                    repository.validateByokKey(config.provider, config.apiKey, config.modelId)
+                }
+                when (result) {
+                    is KeyValidationResult.Valid -> {
+                        _byokFeedbackMessage.value = true to "Online check passed for '${config.nickname}' (${config.provider.displayName})."
+                    }
+                    is KeyValidationResult.Invalid -> {
+                        _byokFeedbackMessage.value = false to result.reason
+                    }
+                }
+            } catch (e: Exception) {
+                val sanitized = (e.message ?: "Unknown error").let { msg ->
+                    if (rawKeyForRedaction.isNotBlank()) msg.replace(rawKeyForRedaction, "[REDACTED]") else msg
+                }
+                _byokFeedbackMessage.value = false to "Online verification failed: $sanitized"
+            } finally {
+                _isByokValidating.value = false
+            }
+        }
+    }
+
     fun addAndValidateByokKey(
         provider: ByokProvider,
         rawApiKey: String,

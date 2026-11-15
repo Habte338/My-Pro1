@@ -83,7 +83,7 @@ object KeystoreCryptoManager {
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setKeySize(256)
-                .setRandomizedEncryptionRequired(false)
+                .setRandomizedEncryptionRequired(true)
                 .build()
             keyGenerator.init(parameterSpec)
             return keyGenerator.generateKey()

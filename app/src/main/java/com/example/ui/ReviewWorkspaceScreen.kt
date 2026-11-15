@@ -39,7 +39,7 @@ data class FidelSeries(
     val exampleAmharic: String,
     val exampleMeaning: String,
     val isVerifiedClassicalEtymology: Boolean = true,
-    val etymologyNote: String = if (isVerifiedClassicalEtymology) "Classical Semitic Ge'ez root" else "Unverified etymology (Modern Amharic palatal consonant innovation)"
+    val etymologyNote: String = if (isVerifiedClassicalEtymology) "Classical Semitic Ge'ez root (Leslau 1995; Dillmann 1899)" else "Unverified, needs native-speaker or linguist review"
 )
 
 data class StudyFlashcard(
@@ -406,8 +406,8 @@ fun FlashcardsStudySection(viewModel: WorkspaceViewModel) {
             StudyFlashcard(6, "ውሃ", "wəha", "Water", "Essential noun.", "Daily Life"),
             StudyFlashcard(7, "እንጀራ", "ənjära", "Injera (Flatbread)", "Staple Ethiopian fermented teff sourdough flatbread.", "Food"),
             StudyFlashcard(8, "ቡና", "bunna", "Coffee", "Ethiopia is the birthplace of Coffea Arabica.", "Culture"),
-            StudyFlashcard(9, "መጽሐፍ", "mätṣ'haf", "Book", "Root: ጸሐፈ (tsä-hä-fä = to write).", "Education"),
-            StudyFlashcard(10, "ትምህርት ቤት", "təmhərt bet", "School", "Literally: House of Education.", "Education")
+            StudyFlashcard(9, "መጽሐፍ", "mätṣ'haf", "Book", "Root: ጸሐፈ (ṣäḥafä = to write). Unverified, needs native-speaker or linguist review.", "Education"),
+            StudyFlashcard(10, "ትምህርት ቤት", "təmhərt bet", "School", "Literally: House of Education. Unverified, needs native-speaker or linguist review.", "Education")
         )
     }
 
@@ -462,7 +462,14 @@ fun FlashcardsStudySection(viewModel: WorkspaceViewModel) {
             trackColor = MaterialTheme.colorScheme.surfaceVariant
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Transliteration: Leslau (ä, u, i, a, ē, ə, o) • Vocabulary & grammar notes: Unverified, needs native-speaker or linguist review",
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Flip Flashcard with 3D Rotation Animation
         Box(
@@ -689,7 +696,7 @@ fun ReviewQuizSection(viewModel: WorkspaceViewModel) {
                 prompt = "What is the English translation of 'አመሰግናለሁ'?",
                 options = listOf("Good morning", "Goodbye", "Thank you", "Please"),
                 correctIndex = 2,
-                explanation = "አመሰግናለሁ (amäsäggïnallähu) means 'Thank you' in Amharic."
+                explanation = "አመሰግናለሁ (amäsäggənallähu) means 'Thank you' in Amharic."
             ),
             ReviewQuizQuestion(
                 prompt = "How many vowel orders are there in the standard Ge'ez abugida system?",
@@ -701,7 +708,7 @@ fun ReviewQuizSection(viewModel: WorkspaceViewModel) {
                 prompt = "Which of the following Amharic words translates to 'Water'?",
                 options = listOf("ሻይ", "ውሃ", "ዳቦ", "ቡና"),
                 correctIndex = 1,
-                explanation = "ውሃ (wïha) translates to 'Water'."
+                explanation = "ውሃ (wəha) translates to 'Water'."
             ),
             ReviewQuizQuestion(
                 prompt = "What does the Amharic word 'ትምህርት ቤት' literally mean?",
@@ -762,7 +769,14 @@ fun ReviewQuizSection(viewModel: WorkspaceViewModel) {
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Transliteration: Leslau (ä, u, i, a, ē, ə, o) • Sample quiz items: Unverified, needs native-speaker or linguist review",
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Question Card
             Card(

@@ -1034,9 +1034,9 @@ fun TranscribeWorkspace(
 
                         // 3. Database Encryption Switch
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text("🔒 SQLite Database Encryption", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                Text("XOR encrypts text data in local DB on-the-fly", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("AES-256-GCM encrypts notes with per-note random IV via Android KeyStore", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Switch(checked = isEncrypted, onCheckedChange = { viewModel.toggleLocalEncryption() })
                         }
@@ -1051,30 +1051,58 @@ fun TranscribeWorkspace(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("📤 Backup Synchronizer (Local Cloud-Sync)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Text("Export or import study databases as text documents for secure manual sync.", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("📤 Backup Synchronizer (Local Study Sync)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("Export plaintext JSON (with warning) or restore JSON/encrypted backups. Use Settings for passphrase-encrypted export.", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                         Spacer(modifier = Modifier.height(10.dp))
 
                         var jsonInputText by remember { mutableStateOf("") }
+                        var showToolsPlaintextWarning by remember { mutableStateOf(false) }
+
+                        if (showToolsPlaintextWarning) {
+                            AlertDialog(
+                                onDismissRequest = { showToolsPlaintextWarning = false },
+                                title = { Text("⚠️ Security Warning: Plaintext Export", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEF4444)) },
+                                text = {
+                                    Text(
+                                        "This exports your study notes as unencrypted plaintext JSON without AES-GCM protection. Use Settings -> Export Passphrase-Encrypted Backup for protected export.\n\nProceed with plaintext export?",
+                                        fontSize = 12.sp
+                                    )
+                                },
+                                confirmButton = {
+                                    Button(
+                                        onClick = {
+                                            showToolsPlaintextWarning = false
+                                            val path = viewModel.exportBackupToJson(context, passphrase = null)
+                                            if (path != null) {
+                                                val backupFile = java.io.File(path)
+                                                if (backupFile.exists()) {
+                                                    val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.provider", backupFile)
+                                                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                                        type = "application/json"
+                                                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                    }
+                                                    context.startActivity(android.content.Intent.createChooser(intent, "Share Study Notes Plaintext Backup"))
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                                    ) {
+                                        Text("Proceed with Plaintext")
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showToolsPlaintextWarning = false }) {
+                                        Text("Cancel")
+                                    }
+                                }
+                            )
+                        }
 
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
-                                onClick = {
-                                    val path = viewModel.exportBackupToJson(context)
-                                    if (path != null) {
-                                        val backupFile = java.io.File(path)
-                                        if (backupFile.exists()) {
-                                            val uri = androidx.core.content.FileProvider.getUriForFile(context, "com.example.provider", backupFile)
-                                            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                                type = "application/json"
-                                                putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                            }
-                                            context.startActivity(android.content.Intent.createChooser(intent, "Share SQLite Study Backup XML/JSON"))
-                                        }
-                                    }
-                                },
+                                onClick = { showToolsPlaintextWarning = true },
                                 modifier = Modifier.weight(1f).height(36.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                                 shape = RoundedCornerShape(10.dp)

@@ -48,6 +48,7 @@ fun SettingsWorkspaceScreen(viewModel: WorkspaceViewModel) {
     var byokApiKey by remember { mutableStateOf("") }
     var byokModelId by remember { mutableStateOf("") }
     var showRawApiKey by remember { mutableStateOf(false) }
+    var verifyOnlineBeforeSaving by remember { mutableStateOf(false) }
 
     var showRestoreDialog by remember { mutableStateOf(false) }
     var restoreInputJson by remember { mutableStateOf("") }
@@ -64,7 +65,7 @@ fun SettingsWorkspaceScreen(viewModel: WorkspaceViewModel) {
     }
 
     LaunchedEffect(byokFeedback) {
-        if (byokFeedback?.first == true) {
+        if (byokFeedback?.first == true && byokKeys.isNotEmpty()) {
             byokApiKey = ""
             byokNickname = ""
             byokModelId = ""
@@ -171,7 +172,7 @@ fun SettingsWorkspaceScreen(viewModel: WorkspaceViewModel) {
 
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Keys are validated before saving, encrypted on-device with Android KeyStore AES-256-GCM (excluded from cloud backup), and never bundled in the APK. Note: Direct client-to-provider HTTPS is used (no backend proxy server).",
+                    text = "Keys are encrypted on-device with Android KeyStore AES-256-GCM (excluded from cloud backup), and never bundled in the APK. Note: Direct client-to-provider HTTPS is used (no backend proxy server).",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 16.sp
@@ -240,7 +241,12 @@ fun SettingsWorkspaceScreen(viewModel: WorkspaceViewModel) {
                     visualTransformation = if (showRawApiKey) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     trailingIcon = {
-                        TextButton(onClick = { showRawApiKey = !showRawApiKey }) {
+                        TextButton(
+                            onClick = { showRawApiKey = !showRawApiKey },
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .testTag("byok_toggle_visibility_button")
+                        ) {
                             Text(if (showRawApiKey) "Hide" else "Show", fontSize = 11.sp)
                         }
                     },
@@ -279,16 +285,43 @@ fun SettingsWorkspaceScreen(viewModel: WorkspaceViewModel) {
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = verifyOnlineBeforeSaving,
+                        onCheckedChange = { verifyOnlineBeforeSaving = it },
+                        modifier = Modifier.testTag("byok_verify_online_checkbox")
+                    )
+                    Text(
+                        text = "Verify key online with provider before saving",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
                     onClick = {
-                        viewModel.addAndValidateByokKey(
-                            provider = selectedProvider,
-                            rawApiKey = byokApiKey,
-                            nickname = byokNickname,
-                            modelId = byokModelId
-                        )
+                        if (verifyOnlineBeforeSaving) {
+                            viewModel.addAndValidateByokKey(
+                                provider = selectedProvider,
+                                rawApiKey = byokApiKey,
+                                nickname = byokNickname,
+                                modelId = byokModelId
+                            )
+                        } else {
+                            viewModel.saveAndEncryptByokKey(
+                                provider = selectedProvider,
+                                rawApiKey = byokApiKey,
+                                nickname = byokNickname,
+                                modelId = byokModelId
+                            )
+                        }
                     },
                     enabled = byokApiKey.isNotBlank() && !isByokValidating,
                     modifier = Modifier
@@ -304,9 +337,17 @@ fun SettingsWorkspaceScreen(viewModel: WorkspaceViewModel) {
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Validating Key...", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (verifyOnlineBeforeSaving) "Verifying & Encrypting..." else "Encrypting Key...",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     } else {
-                        Text("Add & Verify Key", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (verifyOnlineBeforeSaving) "Verify, Encrypt & Save Key" else "Save & Encrypt Key",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
@@ -374,6 +415,14 @@ fun SettingsWorkspaceScreen(viewModel: WorkspaceViewModel) {
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
+                                    }
+
+                                    TextButton(
+                                        onClick = { viewModel.verifySavedByokKey(entry.id) },
+                                        enabled = !isByokValidating,
+                                        modifier = Modifier.testTag("byok_verify_button_${entry.id}")
+                                    ) {
+                                        Text("Verify", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                     }
 
                                     if (!entry.isActive) {

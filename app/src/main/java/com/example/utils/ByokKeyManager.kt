@@ -230,12 +230,31 @@ class ByokKeyManager(context: Context) {
                 if (obj.optBoolean("isActive", false)) break
             }
         }
-        val obj = targetObj ?: return null
+        return decryptEntryObject(targetObj)
+    }
+
+    /**
+     * Decrypts a specific saved key by ID on demand for live provider verification.
+     */
+    @Synchronized
+    fun getDecryptedConfigById(keyId: String): DecryptedByokConfig? {
+        val array = readRawJsonArray()
+        for (i in 0 until array.length()) {
+            val obj = array.optJSONObject(i) ?: continue
+            if (obj.optString("id") == keyId) {
+                return decryptEntryObject(obj)
+            }
+        }
+        return null
+    }
+
+    private fun decryptEntryObject(obj: JSONObject?): DecryptedByokConfig? {
+        if (obj == null) return null
         val encrypted = obj.optString("encryptedApiKey", "")
         if (encrypted.isBlank()) return null
 
         val decryptedKey = KeystoreCryptoManager.decrypt(encrypted)
-        if (decryptedKey.isBlank() || decryptedKey == encrypted && KeystoreCryptoManager.isLegacyOrUnencrypted(encrypted).not()) {
+        if (decryptedKey.isBlank() || (decryptedKey == encrypted && KeystoreCryptoManager.isLegacyOrUnencrypted(encrypted).not())) {
             return null
         }
 

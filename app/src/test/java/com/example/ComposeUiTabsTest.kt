@@ -158,39 +158,88 @@ class ComposeUiTabsTest {
         composeTestRule.onNodeWithText("Question 2 of 5").assertExists()
     }
 
-    // 6. Settings Screen with BYOK Form + Diagnostic + Plaintext Export Warning Interactions
+    // 6. Settings Screen via Bottom Nav with Password-Masked BYOK Form, Save & Encrypt Trigger, and Plaintext Warning
     @Test
     fun testSettingsScreenDirectRenderAndByokInteractions() {
         composeTestRule.setContent {
             MyApplicationTheme {
-                SettingsWorkspaceScreen(viewModel = viewModel)
+                MainAppScreen(viewModel = viewModel)
             }
         }
+        composeTestRule.onNodeWithText("Settings").performClick()
+        composeTestRule.waitForIdle()
+
         composeTestRule.onNodeWithText("Security & Keystore Status").assertExists()
         composeTestRule.onNodeWithText("No User API Key Configured").assertExists()
         composeTestRule.onNodeWithText("Bring Your Own Key (BYOK)").assertExists()
 
-        // Interaction 1: Add button is disabled while API Key field is blank
+        // Interaction 1: Save & Encrypt button is disabled while API Key field is blank
         composeTestRule.onNodeWithTag("byok_add_button").performScrollTo().assertIsNotEnabled()
 
-        // Interaction 2: Switch provider chip to OpenAI and back to Gemini
+        // Interaction 2: Verify API key field is password-masked by default and toggle visibility works
+        composeTestRule.onNodeWithTag("byok_api_key_input")
+            .assert(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Password))
+        composeTestRule.onNodeWithTag("byok_toggle_visibility_button").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("byok_api_key_input")
+            .assert(androidx.compose.ui.test.SemanticsMatcher.keyNotDefined(androidx.compose.ui.semantics.SemanticsProperties.Password))
+        composeTestRule.onNodeWithTag("byok_toggle_visibility_button").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("byok_api_key_input")
+            .assert(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Password))
+
+        // Interaction 3: Switch provider chip to OpenAI and back to Gemini
         composeTestRule.onNodeWithTag("byok_provider_openai").performScrollTo().performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("byok_provider_gemini").performScrollTo().performClick()
         composeTestRule.waitForIdle()
 
-        // Interaction 3: Enter Nickname, API Key, and Model -> Add button becomes enabled
+        // Interaction 4: Enter Nickname, API Key, and Model -> Save & Encrypt Key triggers AES-GCM encryption
         composeTestRule.onNodeWithTag("byok_nickname_input").performScrollTo().performTextInput("Personal Study Key")
         composeTestRule.onNodeWithTag("byok_api_key_input").performScrollTo().performTextInput("test-key-12345678")
         composeTestRule.onNodeWithTag("byok_model_input").performScrollTo().performTextInput("gemini-3.5-flash")
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("byok_add_button").assertIsEnabled()
+        composeTestRule.onNodeWithTag("byok_add_button").performScrollTo().assertIsEnabled().performClick()
 
-        // Interaction 4: Tap refresh security diagnostic
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(20)
+            viewModel.byokKeys.value.isNotEmpty() || viewModel.byokFeedbackMessage.value != null
+        }
+        composeTestRule.waitForIdle()
+        assertEquals(
+            "Expected successful encryption feedback, got: ${viewModel.byokFeedbackMessage.value}",
+            true,
+            viewModel.byokFeedbackMessage.value?.first
+        )
+        assertTrue("Expected saved BYOK key after clicking Save & Encrypt", viewModel.byokKeys.value.isNotEmpty())
+
+        // Verify UI updates with masked key and encrypted feedback, never showing full secret
+        composeTestRule.onNodeWithTag("byok_feedback_banner").performScrollTo().assertExists()
+        composeTestRule.onNodeWithText("Active: Google Gemini (••••5678)").performScrollTo().assertExists()
+        composeTestRule.onNodeWithText("Personal Study Key").performScrollTo().assertExists()
+
+        val prefs = app.getSharedPreferences("byok_secure_prefs", Context.MODE_PRIVATE)
+        val rawStored = prefs.getString("encrypted_byok_entries_v1", "") ?: ""
+        assertTrue("Encrypted BYOK entry must contain AES-GCM prefix", rawStored.contains("[AES_GCM_V1]:"))
+        assertFalse("Raw plaintext API key must never be saved to disk", rawStored.contains("test-key-12345678"))
+
+        // Interaction 5: Delete saved key via UI button
+        val savedId = viewModel.byokKeys.value.first().id
+        composeTestRule.onNodeWithTag("byok_delete_button_$savedId").performScrollTo().performClick()
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(20)
+            viewModel.byokKeys.value.isEmpty()
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("No User API Key Configured").assertExists()
+
+        // Interaction 6: Tap refresh security diagnostic
         composeTestRule.onNodeWithTag("refresh_security_button").performScrollTo().performClick()
         composeTestRule.waitForIdle()
 
-        // Interaction 5: Plaintext export triggers security warning dialog before running
+        // Interaction 7: Plaintext export triggers security warning dialog before running
         composeTestRule.onNodeWithText("📦 Export Plaintext JSON Backup").performScrollTo().performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("⚠️ Security Warning: Plaintext Export").assertExists()
