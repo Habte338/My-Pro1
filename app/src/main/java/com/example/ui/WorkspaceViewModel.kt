@@ -5,10 +5,18 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import com.example.data.WorkspaceRepository
+import com.example.data.api.KeyValidationResult
 import com.example.data.db.AppDatabase
 import com.example.data.db.ChatMessage
+import com.example.data.db.FlashcardMasteryEntity
+import com.example.data.db.QuizScoreEntity
 import com.example.data.db.TranscriptionSession
 import com.example.utils.AudioRecorder
+import com.example.utils.ByokKeyEntry
+import com.example.utils.ByokKeyManager
+import com.example.utils.ByokProvider
+import com.example.utils.KeystoreCryptoManager
+import com.example.utils.RuntimeSecurityStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -16,9 +24,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 
 class WorkspaceViewModel(application: Application) : AndroidViewModel(application) {
@@ -28,16 +39,31 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
             application.applicationContext,
             AppDatabase::class.java,
             "amharic_workspace_db"
-        ).fallbackToDestructiveMigration().build()
+        )
+        .addMigrations(AppDatabase.MIGRATION_1_2)
+        .build()
+    }
+
+    private val byokKeyManager by lazy {
+        ByokKeyManager(application.applicationContext)
     }
 
     private val repository by lazy {
-        WorkspaceRepository(db.workspaceDao())
+        WorkspaceRepository(db.workspaceDao(), byokKeyManager)
     }
 
     private val audioRecorder by lazy {
         AudioRecorder(application.applicationContext)
     }
+
+    // BYOK (Bring Your Own Key) state — never exposes plaintext keys to UI
+    val byokKeys: StateFlow<List<ByokKeyEntry>> = byokKeyManager.entries
+
+    private val _isByokValidating = MutableStateFlow(false)
+    val isByokValidating: StateFlow<Boolean> = _isByokValidating.asStateFlow()
+
+    private val _byokFeedbackMessage = MutableStateFlow<Pair<Boolean, String>?>(null)
+    val byokFeedbackMessage: StateFlow<Pair<Boolean, String>?> = _byokFeedbackMessage.asStateFlow()
 
     // Database streams for History & Chat
     val transcriptionsList: StateFlow<List<TranscriptionSession>> = repository.allTranscriptions
@@ -45,6 +71,42 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
 
     val chatMessagesList: StateFlow<List<ChatMessage>> = repository.allChatMessages
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Database streams for Flashcard mastery & Quiz scores in Room
+    val flashcardMasteryMap: StateFlow<Map<Int, Boolean>> = repository.allFlashcardMastery
+        .map { list -> list.associate { it.cardId to it.isMastered } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    val allQuizScores: StateFlow<List<QuizScoreEntity>> = repository.allQuizScores
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val latestQuizScore: StateFlow<QuizScoreEntity?> = repository.latestQuizScore
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val bestQuizScore: StateFlow<Int?> = repository.bestQuizScore
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    // Dynamic runtime security status from Android KeyStore KeyInfo
+    private val _securityStatus = MutableStateFlow(KeystoreCryptoManager.inspectRuntimeSecurity())
+    val securityStatus: StateFlow<RuntimeSecurityStatus> = _securityStatus.asStateFlow()
+
+    fun refreshSecurityStatus() {
+        _securityStatus.value = KeystoreCryptoManager.inspectRuntimeSecurity()
+    }
+
+    init {
+        // First-access re-encryption of legacy notes with hardware AES-GCM off the UI thread
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.allTranscriptions.collect { sessions ->
+                sessions.forEach { session ->
+                    if (KeystoreCryptoManager.isLegacyOrUnencrypted(session.amharicText) ||
+                        KeystoreCryptoManager.isLegacyOrUnencrypted(session.englishTranslation)) {
+                        upgradeLegacyNoteToAesGcm(session)
+                    }
+                }
+            }
+        }
+    }
 
     // UI operational states
     private val _isRecording = MutableStateFlow(false)
@@ -172,19 +234,13 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
         _audioBatchQueue.value = emptyList()
     }
 
-    // High fidelity encryption utilities
+    // Enterprise Keystore AES-GCM encryption with per-note IV
     fun encryptString(input: String): String {
-        if (input.isBlank()) return input
-        val encrypted = input.map { (it.code xor 42).toChar() }.joinToString("")
-        return "[SECURE_ENC]$encrypted"
+        return com.example.utils.KeystoreCryptoManager.encrypt(input)
     }
 
     fun decryptString(input: String): String {
-        if (input.startsWith("[SECURE_ENC]")) {
-            val encryptedPart = input.substring("[SECURE_ENC]".length)
-            return encryptedPart.map { (it.code xor 42).toChar() }.joinToString("")
-        }
-        return input
+        return com.example.utils.KeystoreCryptoManager.decrypt(input)
     }
 
     // Helper to copy URI to cache File with image optimization and orientation correction
@@ -779,15 +835,150 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun exportBackupToJson(context: android.content.Context): String? {
+    // Flashcard & Quiz Room persistence actions
+    fun toggleFlashcardMastery(cardId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = flashcardMasteryMap.value[cardId] ?: false
+            repository.setFlashcardMastery(cardId, !current)
+        }
+    }
+
+    fun setFlashcardMastery(cardId: Int, isMastered: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.setFlashcardMastery(cardId, isMastered)
+        }
+    }
+
+    fun recordQuizResult(score: Int, total: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.recordQuizScore(score, total)
+        }
+    }
+
+    fun onNoteAccessed(session: TranscriptionSession) {
+        if (KeystoreCryptoManager.isLegacyOrUnencrypted(session.amharicText) ||
+            KeystoreCryptoManager.isLegacyOrUnencrypted(session.englishTranslation)) {
+            viewModelScope.launch(Dispatchers.IO) {
+                upgradeLegacyNoteToAesGcm(session)
+            }
+        }
+    }
+
+    // BYOK (Bring Your Own Key) management actions
+    fun addAndValidateByokKey(
+        provider: ByokProvider,
+        rawApiKey: String,
+        nickname: String,
+        modelId: String
+    ) {
+        val cleanKey = rawApiKey.trim()
+        if (cleanKey.isEmpty()) {
+            _byokFeedbackMessage.value = false to "API key is required."
+            return
+        }
+
+        viewModelScope.launch {
+            _isByokValidating.value = true
+            _byokFeedbackMessage.value = null
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    repository.validateByokKey(provider, cleanKey, modelId)
+                }
+                when (result) {
+                    is KeyValidationResult.Valid -> {
+                        val saved = withContext(Dispatchers.IO) {
+                            byokKeyManager.saveValidatedKey(provider, cleanKey, nickname, modelId)
+                        }
+                        _byokFeedbackMessage.value = true to "Verified and encrypted '${saved.nickname}' (${saved.maskedKey}) in Android KeyStore."
+                        _statusMessage.value = "BYOK key '${saved.nickname}' active."
+                    }
+                    is KeyValidationResult.Invalid -> {
+                        _byokFeedbackMessage.value = false to result.reason
+                    }
+                }
+            } catch (e: Exception) {
+                val sanitized = (e.message ?: "Unknown error").replace(cleanKey, "[REDACTED]")
+                _byokFeedbackMessage.value = false to "Failed to validate key: $sanitized"
+            } finally {
+                _isByokValidating.value = false
+            }
+        }
+    }
+
+    fun selectActiveByokKey(keyId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            byokKeyManager.setActiveKey(keyId)
+            val active = byokKeyManager.getActiveEntry()
+            withContext(Dispatchers.Main) {
+                if (active != null) {
+                    _byokFeedbackMessage.value = true to "Active key switched to '${active.nickname}' (${active.provider.displayName})."
+                }
+            }
+        }
+    }
+
+    fun deleteByokKey(keyId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            byokKeyManager.deleteKey(keyId)
+            withContext(Dispatchers.Main) {
+                _byokFeedbackMessage.value = true to "API key deleted from secure device storage."
+            }
+        }
+    }
+
+    fun clearByokFeedback() {
+        _byokFeedbackMessage.value = null
+    }
+
+    suspend fun upgradeLegacyNoteToAesGcm(session: TranscriptionSession) {
+        try {
+            val decryptedAmharic = KeystoreCryptoManager.decrypt(session.amharicText)
+            val decryptedEnglish = KeystoreCryptoManager.decrypt(session.englishTranslation)
+            val upgradedAmharic = KeystoreCryptoManager.encrypt(decryptedAmharic)
+            val upgradedEnglish = KeystoreCryptoManager.encrypt(decryptedEnglish)
+            val upgraded = session.copy(
+                amharicText = upgradedAmharic,
+                englishTranslation = upgradedEnglish
+            )
+            repository.saveTranscription(upgraded)
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Exports study notes backup.
+     * If passphrase is provided: encrypts entire payload via PBKDF2WithHmacSHA256 + AES-GCM 256.
+     * If passphrase is null/empty: exports decrypted clean plaintext JSON for cross-device portability.
+     */
+    fun exportBackupToJson(context: android.content.Context, passphrase: String? = null): String? {
         return try {
             val list = transcriptionsList.value
-            val backupArray = list.joinToString(prefix = "[", postfix = "]") { item ->
-                """{"id":${item.id},"title":"${item.title.replace("\"", "\\\"")}","amharicText":"${item.amharicText.replace("\"", "\\\"")}","englishTranslation":"${item.englishTranslation.replace("\"", "\\\"")}","durationSeconds":${item.durationSeconds},"timestamp":${item.timestamp}}"""
+            val jsonArray = JSONArray()
+            for (item in list) {
+                val obj = JSONObject()
+                obj.put("id", item.id)
+                obj.put("title", item.title)
+                // Always decrypt device-local hardware keystore ciphertext before export
+                obj.put("amharicText", decryptString(item.amharicText))
+                obj.put("englishTranslation", decryptString(item.englishTranslation))
+                obj.put("durationSeconds", item.durationSeconds)
+                obj.put("timestamp", item.timestamp)
+                jsonArray.put(obj)
             }
-            val file = File(context.cacheDir, "abyssinia_study_backup.json")
-            file.writeText(backupArray)
-            _statusMessage.value = "Data backup prepared successfully."
+            val rawJson = jsonArray.toString(2)
+            val isEncrypted = !passphrase.isNullOrBlank()
+            val finalContent = if (isEncrypted) {
+                KeystoreCryptoManager.encryptBackupWithPassphrase(rawJson, passphrase!!)
+            } else {
+                rawJson
+            }
+            val fileName = if (isEncrypted) "abyssinia_study_backup_encrypted.json" else "abyssinia_study_backup.json"
+            val file = File(context.cacheDir, fileName)
+            file.writeText(finalContent)
+            _statusMessage.value = if (isEncrypted) {
+                "Passphrase-encrypted backup created (AES-256-GCM + PBKDF2)."
+            } else {
+                "Plaintext JSON backup prepared for export."
+            }
             file.absolutePath
         } catch (e: Exception) {
             _statusMessage.value = "Backup creation failed: ${e.message}"
@@ -795,37 +986,118 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun restoreBackupFromJson(jsonString: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val objectRegex = "\\{([^}]+)\\}".toRegex()
-                val matches = objectRegex.findAll(jsonString)
-                var restoredCount = 0
-                matches.forEach { match ->
-                    val body = match.groupValues[1]
-                    val title = "\"title\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(body)?.groupValues?.get(1) ?: "Restored Note"
-                    val amharic = "\"amharicText\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(body)?.groupValues?.get(1) ?: ""
-                    val english = "\"englishTranslation\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(body)?.groupValues?.get(1) ?: ""
-                    val duration = "\"durationSeconds\"\\s*:\\s*(\\d+)".toRegex().find(body)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                    
-                    val session = TranscriptionSession(
-                        title = title,
+    /**
+     * Restores study notes from backup with strict format validation and merge deduplication.
+     * Documents merge behavior:
+     * 1. Deduplicates against existing notes in Room by matching title and amharicText.
+     * 2. Preserves timestamps while generating fresh IDs to avoid primary key collisions.
+     * 3. Re-encrypts with local Android KeyStore AES-GCM when storing to Room.
+     * 4. Rejects malformed JSON, empty arrays, or incorrect passphrases without modifying the DB.
+     */
+    fun restoreBackupFromJson(jsonString: String, passphrase: String? = null): Boolean {
+        val trimmed = jsonString.trim()
+        if (trimmed.isEmpty()) {
+            _statusMessage.value = "Restore rejected: Empty backup file content."
+            return false
+        }
+
+        try {
+            val decryptedJson = if (trimmed.contains(KeystoreCryptoManager.BACKUP_ENCRYPTED_FORMAT)) {
+                if (passphrase.isNullOrBlank()) {
+                    _statusMessage.value = "Restore rejected: This backup is passphrase-encrypted. Please provide your passphrase."
+                    return false
+                }
+                try {
+                    KeystoreCryptoManager.decryptBackupWithPassphrase(trimmed, passphrase)
+                } catch (e: Exception) {
+                    _statusMessage.value = "Restore rejected: Incorrect passphrase or corrupted backup file."
+                    return false
+                }
+            } else {
+                trimmed
+            }
+
+            // Strict JSON array parsing validation
+            val jsonArray = try {
+                JSONArray(decryptedJson)
+            } catch (e: Exception) {
+                _statusMessage.value = "Restore rejected: Malformed JSON. Input must be a valid JSON array of notes."
+                return false
+            }
+
+            if (jsonArray.length() == 0) {
+                _statusMessage.value = "Restore rejected: Backup array contains zero note records."
+                return false
+            }
+
+            val notesToRestore = mutableListOf<TranscriptionSession>()
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.optJSONObject(i)
+                if (obj == null) {
+                    _statusMessage.value = "Restore rejected: Record at index $i is not a valid JSON object."
+                    return false
+                }
+                val title = obj.optString("title", "").trim()
+                val amharic = obj.optString("amharicText", "").trim()
+                val english = obj.optString("englishTranslation", "").trim()
+                val duration = obj.optInt("durationSeconds", 0)
+                val timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+
+                if (title.isEmpty() && amharic.isEmpty()) {
+                    _statusMessage.value = "Restore rejected: Note at index $i is missing required 'title' and 'amharicText' fields."
+                    return false
+                }
+
+                notesToRestore.add(
+                    TranscriptionSession(
+                        title = if (title.isEmpty()) "Restored Note #${i + 1}" else title,
                         amharicText = amharic,
                         englishTranslation = english,
                         durationSeconds = duration,
-                        filePath = null
+                        filePath = null,
+                        timestamp = timestamp
                     )
-                    repository.saveTranscription(session)
-                    restoredCount++
+                )
+            }
+
+            // Execute merge with deduplication against existing notes in Room
+            viewModelScope.launch(Dispatchers.IO) {
+                val existing = transcriptionsList.value
+                var restoredCount = 0
+                var skippedCount = 0
+
+                notesToRestore.forEach { note ->
+                    val isDuplicate = existing.any { ex ->
+                        val exAmharic = decryptString(ex.amharicText).trim()
+                        val exEnglish = decryptString(ex.englishTranslation).trim()
+                        ex.title.trim().equals(note.title.trim(), ignoreCase = true) &&
+                                exAmharic == note.amharicText.trim() &&
+                                exEnglish == note.englishTranslation.trim()
+                    }
+
+                    if (isDuplicate) {
+                        skippedCount++
+                    } else {
+                        val amharicToStore = if (_isLocalEncryptionActive.value) encryptString(note.amharicText) else note.amharicText
+                        val englishToStore = if (_isLocalEncryptionActive.value) encryptString(note.englishTranslation) else note.englishTranslation
+                        val toInsert = note.copy(
+                            id = 0,
+                            amharicText = amharicToStore,
+                            englishTranslation = englishToStore
+                        )
+                        repository.saveTranscription(toInsert)
+                        restoredCount++
+                    }
                 }
+
                 withContext(Dispatchers.Main) {
-                    _statusMessage.value = "Restored $restoredCount study notes successfully!"
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    _statusMessage.value = "Failed to parse backup content: ${e.message}"
+                    _statusMessage.value = "Restore completed: Restored $restoredCount notes ($skippedCount duplicate notes skipped)."
                 }
             }
+            return true
+        } catch (e: Exception) {
+            _statusMessage.value = "Restore rejected: ${e.message}"
+            return false
         }
     }
 

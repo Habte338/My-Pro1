@@ -58,19 +58,10 @@ android {
   testOptions { unitTests { isIncludeAndroidResources = true } }
 }
 
-// Configure the Secrets Gradle Plugin to use .env and .env.example files
-// to match the convention used in Web projects.
-val envGeminiKey = System.getenv("GEMINI_API_KEY") ?: ""
-if (envGeminiKey.isNotEmpty()) {
-  val envFile = file("${rootDir}/.env")
-  if (!envFile.exists() || !envFile.readText().contains("GEMINI_API_KEY") || envFile.readText().contains("MY_GEMINI_API_KEY")) {
-    envFile.writeText("GEMINI_API_KEY=$envGeminiKey\n")
-  }
-}
-
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
+  ignoreList.add("GEMINI_API_KEY")
 }
 
 // Some unused dependencies are commented out below instead of being removed.

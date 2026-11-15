@@ -1,16 +1,22 @@
 package com.example.data
 
 import android.util.Base64
-import com.example.BuildConfig
+import com.example.data.api.ByokNetworkClient
+import com.example.data.api.ByokProviderAdapter
 import com.example.data.api.Content
 import com.example.data.api.GeminiRequest
+import com.example.data.api.GenerationConfig
 import com.example.data.api.InlineData
+import com.example.data.api.KeyValidationResult
 import com.example.data.api.Part
 import com.example.data.api.RetrofitClient
-import com.example.data.api.GenerationConfig
 import com.example.data.db.ChatMessage
+import com.example.data.db.FlashcardMasteryEntity
+import com.example.data.db.QuizScoreEntity
 import com.example.data.db.TranscriptionSession
 import com.example.data.db.WorkspaceDao
+import com.example.utils.ByokKeyManager
+import com.example.utils.ByokProvider
 import kotlinx.coroutines.flow.Flow
 import java.io.File
 
@@ -21,7 +27,11 @@ data class OcrResult(
     val error: String? = null
 )
 
-class WorkspaceRepository(private val dao: WorkspaceDao) {
+class WorkspaceRepository(
+    private val dao: WorkspaceDao,
+    private val byokKeyManager: ByokKeyManager? = null,
+    private val providerAdapter: ByokNetworkClient = ByokProviderAdapter()
+) {
 
     // Local DB Observables & Mutations
     val allTranscriptions: Flow<List<TranscriptionSession>> = dao.getAllTranscriptions()
@@ -43,12 +53,47 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
         dao.clearChatHistory()
     }
 
-    // Gemini API Direct Calls
+    // Flashcard mastery persistence
+    val allFlashcardMastery: Flow<List<FlashcardMasteryEntity>> = dao.getAllFlashcardMastery()
+
+    suspend fun setFlashcardMastery(cardId: Int, isMastered: Boolean) {
+        dao.setFlashcardMastery(
+            FlashcardMasteryEntity(
+                cardId = cardId,
+                isMastered = isMastered,
+                lastUpdated = System.currentTimeMillis()
+            )
+        )
+    }
+
+    // Quiz scores persistence
+    val allQuizScores: Flow<List<QuizScoreEntity>> = dao.getAllQuizScores()
+    val latestQuizScore: Flow<QuizScoreEntity?> = dao.getLatestQuizScore()
+    val bestQuizScore: Flow<Int?> = dao.getBestQuizScore()
+
+    suspend fun recordQuizScore(score: Int, total: Int): Long {
+        return dao.insertQuizScore(
+            QuizScoreEntity(
+                score = score,
+                totalQuestions = total,
+                percentage = if (total > 0) (score * 100) / total else 0
+            )
+        )
+    }
+
+    // BYOK Validation
+    suspend fun validateByokKey(provider: ByokProvider, apiKey: String, modelId: String): KeyValidationResult {
+        return providerAdapter.validateKey(provider, apiKey, modelId)
+    }
+
+    // Multimodal Audio & OCR Calls (via active Gemini BYOK key)
     suspend fun transcribeAndDetectAudio(audioFile: File, translateTo: String): OcrResult {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-            return OcrResult(error = "Error: Gemini API Key is missing. Please configure it in the Secrets panel in AI Studio.")
+        val config = byokKeyManager?.getActiveDecryptedConfig()
+            ?: return OcrResult(error = "No BYOK API key configured. Open Settings -> Bring Your Own Key to add your key.")
+        if (!config.provider.supportsMultimodal) {
+            return OcrResult(error = "${config.provider.displayName} active key supports text chat & translation. Select or add a Google Gemini BYOK key for audio transcription.")
         }
+        val model = config.modelId.ifBlank { ByokProvider.GEMINI.defaultModel }
 
         val base64Bytes = try {
             val bytes = audioFile.readBytes()
@@ -95,8 +140,8 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
         )
 
         return try {
-            val response = RetrofitClient.service.generateContent(apiKey, request)
-            var jsonText = response.extractText()
+            val response = RetrofitClient.service.generateContent(model, config.apiKey, request)
+            val jsonText = response.extractText()
             if (jsonText != null) {
                 var cleanJson = jsonText.trim()
                 if (cleanJson.startsWith("```")) {
@@ -116,13 +161,13 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
                     val langRegex = "\"originalLanguage\"\\s*:\\s*\"([^\"]+)\"".toRegex()
                     val transRegex = "\"transcription\"\\s*:\\s*\"([\\s\\S]*?)\"\\s*,\\s*\"translation\"".toRegex()
                     val translatRegex = "\"translation\"\\s*:\\s*\"([\\s\\S]*?)\"".toRegex()
-                    
+
                     val lang = langRegex.find(cleanJson)?.groupValues?.get(1) ?: "Detected Spoken Language"
                     val trans = transRegex.find(cleanJson)?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"")
                         ?: cleanJson
                     val translation = translatRegex.find(cleanJson)?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"")
                         ?: if (translateTo != "None" && translateTo.lowercase() != "same") "Translation available" else "Same"
-                    
+
                     OcrResult(originalLanguage = lang, transcription = trans, translation = translation)
                 }
             } else {
@@ -134,10 +179,12 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
     }
 
     suspend fun transcribeAudio(audioFile: File): String {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-            return "Error: Gemini API Key is missing. Please configure it in the Secrets panel in AI Studio."
+        val config = byokKeyManager?.getActiveDecryptedConfig()
+            ?: return "Error: No BYOK API key configured. Open Settings -> Bring Your Own Key to add your key."
+        if (!config.provider.supportsMultimodal) {
+            return "Error: ${config.provider.displayName} active key does not support audio transcription. Switch to a Google Gemini BYOK key."
         }
+        val model = config.modelId.ifBlank { ByokProvider.GEMINI.defaultModel }
 
         val base64Bytes = try {
             val bytes = audioFile.readBytes()
@@ -167,37 +214,26 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
             )
         )
 
-        val response = RetrofitClient.service.generateContent(apiKey, request)
+        val response = RetrofitClient.service.generateContent(model, config.apiKey, request)
         return response.extractText()
             ?: "Transcription failed. No text returned from Gemini."
     }
 
     suspend fun translateText(text: String): String {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-            return "Error: API Key is missing. Configure it in the AI Studio Secrets panel."
-        }
+        val config = byokKeyManager?.getActiveDecryptedConfig()
+            ?: return "Error: No BYOK API key configured. Open Settings -> Bring Your Own Key to add your key."
 
-        val request = GeminiRequest(
-            contents = listOf(
-                Content(
-                    parts = listOf(
-                        Part(text = "Translate the following text into clear, modern English. If the text is in Amharic, Oromo, Tigrinya, Somali or other languages, output the English translation itself. Do not write any explanations, introduction, prefix, or note:\n\n$text")
-                    )
-                )
-            )
+        val prompt = "Translate the following text into clear, modern English. If the text is in Amharic, Oromo, Tigrinya, Somali or other languages, output the English translation itself. Do not write any explanations, introduction, prefix, or note:\n\n$text"
+        return providerAdapter.generateText(
+            config = config,
+            systemInstruction = null,
+            messages = listOf("user" to prompt)
         )
-
-        val response = RetrofitClient.service.generateContent(apiKey, request)
-        return response.extractText()
-            ?: "Translation failed."
     }
 
     suspend fun translateEthiopianText(text: String, sourceLang: String, targetLang: String): String {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-            return "Error: API Key is missing. Configure it in the AI Studio Secrets panel."
-        }
+        val config = byokKeyManager?.getActiveDecryptedConfig()
+            ?: return "Error: No BYOK API key configured. Open Settings -> Bring Your Own Key to add your key."
 
         val prompt = """
             Translate the following text from '$sourceLang' into clear, modern '$targetLang'.
@@ -207,26 +243,20 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
             $text
         """.trimIndent()
 
-        val request = GeminiRequest(
-            contents = listOf(
-                Content(
-                    parts = listOf(
-                        Part(text = prompt)
-                    )
-                )
-            )
+        return providerAdapter.generateText(
+            config = config,
+            systemInstruction = null,
+            messages = listOf("user" to prompt)
         )
-
-        val response = RetrofitClient.service.generateContent(apiKey, request)
-        return response.extractText()
-            ?: "Translation failed."
     }
 
     suspend fun performOcrOnImage(imageFile: File, translateTo: String): OcrResult {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-            return OcrResult(error = "Error: Gemini API Key is missing. Please configure it in the Secrets panel in AI Studio.")
+        val config = byokKeyManager?.getActiveDecryptedConfig()
+            ?: return OcrResult(error = "No BYOK API key configured. Open Settings -> Bring Your Own Key to add your key.")
+        if (!config.provider.supportsMultimodal) {
+            return OcrResult(error = "${config.provider.displayName} active key supports text chat & translation. Select or add a Google Gemini BYOK key for visual OCR.")
         }
+        val model = config.modelId.ifBlank { ByokProvider.GEMINI.defaultModel }
 
         val base64Bytes = try {
             val bytes = imageFile.readBytes()
@@ -263,14 +293,14 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
         )
 
         return try {
-            val response = RetrofitClient.service.generateContent(apiKey, request)
+            val response = RetrofitClient.service.generateContent(model, config.apiKey, request)
             val jsonText = response.extractText()
             if (jsonText != null) {
                 var cleanJson = jsonText.trim()
                 if (cleanJson.startsWith("```")) {
                     cleanJson = cleanJson.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
                 }
-                
+
                 try {
                     val jsonObj = org.json.JSONObject(cleanJson)
                     val lang = jsonObj.optString("originalLanguage", "Detected Ethiopian Language")
@@ -282,17 +312,16 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
                         OcrResult(originalLanguage = lang, transcription = cleanJson, translation = translation)
                     }
                 } catch (_: Exception) {
-                    // Fallback to regex or direct text if model returned non-standard JSON
                     val langRegex = "\"originalLanguage\"\\s*:\\s*\"([^\"]+)\"".toRegex()
                     val transRegex = "\"transcription\"\\s*:\\s*\"([\\s\\S]*?)\"\\s*,\\s*\"translation\"".toRegex()
                     val translatRegex = "\"translation\"\\s*:\\s*\"([\\s\\S]*?)\"".toRegex()
-                    
+
                     val lang = langRegex.find(cleanJson)?.groupValues?.get(1) ?: "Detected Ethiopian Language"
                     val trans = transRegex.find(cleanJson)?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"")
                         ?: cleanJson
                     val translation = translatRegex.find(cleanJson)?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"")
                         ?: if (translateTo != "None" && translateTo.lowercase() != "same") "Translation available via Translate button" else "Same"
-                    
+
                     OcrResult(originalLanguage = lang, transcription = trans, translation = translation)
                 }
             } else {
@@ -304,13 +333,10 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
     }
 
     suspend fun generateChatResponse(currentMessage: String, history: List<ChatMessage>): String {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-            return "Error: API Key is missing. Configure it in the AI Studio Secrets panel."
-        }
+        val config = byokKeyManager?.getActiveDecryptedConfig()
+            ?: return "Error: No BYOK API key configured. Open Settings -> Bring Your Own Key to add your key."
 
-        // Map ChatMessage entity to Gemini Content model with alternating turn sanitization
-        val mappedContents = mutableListOf<Content>()
+        val mappedMessages = mutableListOf<Pair<String, String>>()
         var lastRole: String? = null
 
         for (msg in history) {
@@ -319,49 +345,37 @@ class WorkspaceRepository(private val dao: WorkspaceDao) {
                 continue
             }
             val role = if (msg.role == "user") "user" else "model"
-            if (role == lastRole && mappedContents.isNotEmpty()) {
-                val lastIdx = mappedContents.lastIndex
-                val prev = mappedContents[lastIdx]
-                val prevText = prev.parts.firstOrNull()?.text ?: ""
-                mappedContents[lastIdx] = Content(role = role, parts = listOf(Part(text = "$prevText\n$text")))
+            if (role == lastRole && mappedMessages.isNotEmpty()) {
+                val lastIdx = mappedMessages.lastIndex
+                val prevText = mappedMessages[lastIdx].second
+                mappedMessages[lastIdx] = role to "$prevText\n$text"
             } else {
-                mappedContents.add(Content(role = role, parts = listOf(Part(text = text))))
+                mappedMessages.add(role to text)
                 lastRole = role
             }
         }
 
-        // Add current user message
-        if (lastRole == "user" && mappedContents.isNotEmpty()) {
-            val lastIdx = mappedContents.lastIndex
-            val prev = mappedContents[lastIdx]
-            val prevText = prev.parts.firstOrNull()?.text ?: ""
+        if (lastRole == "user" && mappedMessages.isNotEmpty()) {
+            val lastIdx = mappedMessages.lastIndex
+            val prevText = mappedMessages[lastIdx].second
             if (!prevText.contains(currentMessage.trim())) {
-                mappedContents[lastIdx] = Content(role = "user", parts = listOf(Part(text = "$prevText\n${currentMessage.trim()}")))
+                mappedMessages[lastIdx] = "user" to "$prevText\n${currentMessage.trim()}"
             }
         } else {
-            mappedContents.add(Content(role = "user", parts = listOf(Part(text = currentMessage.trim()))))
+            mappedMessages.add("user" to currentMessage.trim())
         }
 
-        // Remove any leading model turns (Gemini conversation must start with user turn)
-        while (mappedContents.isNotEmpty() && mappedContents.first().role != "user") {
-            mappedContents.removeAt(0)
+        while (mappedMessages.isNotEmpty() && mappedMessages.first().first != "user") {
+            mappedMessages.removeAt(0)
         }
 
-        val systemInstruction = Content(
-            parts = listOf(
-                Part(
-                    text = "You are an Ethiopian Languages Tutor & Study Workspace Assistant. Your job is to assist users in studying and learning Amharic, Tigrinya, Oromo, Somali, and other local languages. Answer study notes, explain vocabulary, or help with quizzes. Be encouraging, precise, and use proper Ge'ez/Latin script. CRITICAL: Do NOT use any asterisks (*) for formatting, bold, headers, list bullets, or emphasis. Return only clean and neatly formatted plain text with spaces or standard unicode bullets (like •)."
-                )
-            )
-        )
+        val systemInstruction = "You are an Ethiopian Languages Tutor & Study Workspace Assistant. Your job is to assist users in studying and learning Amharic, Tigrinya, Oromo, Somali, and other local languages. Answer study notes, explain vocabulary, or help with quizzes. Be encouraging, precise, and use proper Ge'ez/Latin script. CRITICAL: Do NOT use any asterisks (*) for formatting, bold, headers, list bullets, or emphasis. Return only clean and neatly formatted plain text with spaces or standard unicode bullets (like •)."
 
-        val request = GeminiRequest(
-            contents = mappedContents,
-            systemInstruction = systemInstruction
+        val reply = providerAdapter.generateText(
+            config = config,
+            systemInstruction = systemInstruction,
+            messages = mappedMessages
         )
-
-        val response = RetrofitClient.service.generateContent(apiKey, request)
-        val plainText = response.extractText()
-        return plainText?.replace("*", "") ?: "I'm sorry, I couldn't reach my servers right now."
+        return reply.replace("*", "")
     }
 }

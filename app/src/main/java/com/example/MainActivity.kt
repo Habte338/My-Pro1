@@ -110,7 +110,7 @@ class MainActivity : ComponentActivity() {
 }
 
 enum class ActiveWorkspace {
-    TRANSCRIBE, TUTOR_BOT, HISTORY, OCR
+    TRANSCRIBE, TUTOR_BOT, HISTORY, OCR, REVIEW, SETTINGS
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -226,8 +226,38 @@ fun MainAppScreen(viewModel: WorkspaceViewModel) {
                 NavigationBarItem(
                     selected = activeTab == ActiveWorkspace.OCR,
                     onClick = { activeTab = ActiveWorkspace.OCR },
-                    icon = { Text("📷", fontSize = 22.sp) },
-                    label = { Text("OCR Scan", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                    icon = { Text("📷", fontSize = 20.sp) },
+                    label = { Text("OCR", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                        indicatorColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f),
+                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                )
+
+                // Review Tab
+                NavigationBarItem(
+                    selected = activeTab == ActiveWorkspace.REVIEW,
+                    onClick = { activeTab = ActiveWorkspace.REVIEW },
+                    icon = { Text("🔤", fontSize = 20.sp) },
+                    label = { Text("Review", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                        indicatorColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f),
+                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                )
+
+                // Settings Tab
+                NavigationBarItem(
+                    selected = activeTab == ActiveWorkspace.SETTINGS,
+                    onClick = { activeTab = ActiveWorkspace.SETTINGS },
+                    icon = { Text("⚙️", fontSize = 20.sp) },
+                    label = { Text("Settings", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -365,6 +395,12 @@ fun MainAppScreen(viewModel: WorkspaceViewModel) {
 
                     ActiveWorkspace.OCR -> {
                         OcrWorkspaceScreen(viewModel = viewModel)
+                    }
+                    ActiveWorkspace.REVIEW -> {
+                        com.example.ui.ReviewWorkspaceScreen(viewModel = viewModel)
+                    }
+                    ActiveWorkspace.SETTINGS -> {
+                        com.example.ui.SettingsWorkspaceScreen(viewModel = viewModel)
                     }
                 }
             }
@@ -1490,6 +1526,9 @@ fun HistoryWorkspace(
             }
         } else {
             items(transcriptions) { session ->
+                LaunchedEffect(session.id) {
+                    viewModel.onNoteAccessed(session)
+                }
                 val decryptedAmharic = remember(session.amharicText) { viewModel.decryptString(session.amharicText) }
                 val decryptedEnglish = remember(session.englishTranslation) { viewModel.decryptString(session.englishTranslation) }
 

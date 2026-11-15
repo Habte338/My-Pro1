@@ -29,6 +29,22 @@ data class ChatMessage(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "flashcard_mastery")
+data class FlashcardMasteryEntity(
+    @PrimaryKey val cardId: Int,
+    val isMastered: Boolean,
+    val lastUpdated: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "quiz_scores")
+data class QuizScoreEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val score: Int,
+    val totalQuestions: Int,
+    val percentage: Int = if (totalQuestions > 0) (score * 100) / totalQuestions else 0,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 @Dao
 interface WorkspaceDao {
     @Query("SELECT * FROM transcriptions ORDER BY timestamp DESC")
@@ -48,9 +64,66 @@ interface WorkspaceDao {
 
     @Query("DELETE FROM chat_messages")
     suspend fun clearChatHistory()
+
+    // Flashcard mastery persistence
+    @Query("SELECT * FROM flashcard_mastery")
+    fun getAllFlashcardMastery(): Flow<List<FlashcardMasteryEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun setFlashcardMastery(mastery: FlashcardMasteryEntity)
+
+    // Quiz scores persistence
+    @Query("SELECT * FROM quiz_scores ORDER BY timestamp DESC")
+    fun getAllQuizScores(): Flow<List<QuizScoreEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertQuizScore(score: QuizScoreEntity): Long
+
+    @Query("SELECT * FROM quiz_scores ORDER BY timestamp DESC LIMIT 1")
+    fun getLatestQuizScore(): Flow<QuizScoreEntity?>
+
+    @Query("SELECT MAX(score) FROM quiz_scores")
+    fun getBestQuizScore(): Flow<Int?>
 }
 
-@Database(entities = [TranscriptionSession::class, ChatMessage::class], version = 1, exportSchema = false)
+@Database(
+    entities = [
+        TranscriptionSession::class,
+        ChatMessage::class,
+        FlashcardMasteryEntity::class,
+        QuizScoreEntity::class
+    ],
+    version = 2,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun workspaceDao(): WorkspaceDao
+
+    companion object {
+        val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `flashcard_mastery` (
+                        `cardId` INTEGER NOT NULL,
+                        `isMastered` INTEGER NOT NULL,
+                        `lastUpdated` INTEGER NOT NULL,
+                        PRIMARY KEY(`cardId`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `quiz_scores` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `score` INTEGER NOT NULL,
+                        `totalQuestions` INTEGER NOT NULL,
+                        `percentage` INTEGER NOT NULL,
+                        `timestamp` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+    }
 }

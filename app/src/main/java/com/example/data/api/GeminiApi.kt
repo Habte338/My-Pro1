@@ -3,12 +3,16 @@ package com.example.data.api
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import okhttp3.OkHttpClient
+import okhttp3.ResponseBody
 import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Body
+import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.POST
-import retrofit2.http.Query
+import retrofit2.http.Path
 import java.util.concurrent.TimeUnit
 
 @JsonClass(generateAdapter = true)
@@ -47,14 +51,17 @@ data class GenerationConfig(
 data class GeminiResponse(
     @Json(name = "candidates") val candidates: List<Candidate>?
 ) {
+    /**
+     * Extracts model answer text from candidates, returning null rather than thought text
+     * when no actual answer parts exist.
+     */
     fun extractText(): String? {
         val parts = candidates?.firstOrNull()?.content?.parts ?: return null
         val nonThoughtParts = parts.filter { it.thought != true }
-        val text = if (nonThoughtParts.isNotEmpty()) {
-            nonThoughtParts.mapNotNull { it.text }.joinToString("\n").trim()
-        } else {
-            parts.mapNotNull { it.text }.joinToString("\n").trim()
+        if (nonThoughtParts.isEmpty()) {
+            return null
         }
+        val text = nonThoughtParts.mapNotNull { it.text }.joinToString("\n").trim()
         return text.ifEmpty { null }
     }
 }
@@ -65,22 +72,30 @@ data class Candidate(
 )
 
 interface GeminiApiService {
-    @POST("v1beta/models/gemini-3.5-flash:generateContent")
+    @POST("v1beta/models/{model}:generateContent")
     suspend fun generateContent(
-        @Query("key") apiKey: String,
+        @Path("model") model: String,
+        @Header("x-goog-api-key") apiKey: String,
         @Body request: GeminiRequest
     ): GeminiResponse
+
+    @GET("v1beta/models/{model}")
+    suspend fun validateModelAndKey(
+        @Path("model") model: String,
+        @Header("x-goog-api-key") apiKey: String
+    ): Response<ResponseBody>
 }
 
 object RetrofitClient {
     private const val BASE_URL = "https://generativelanguage.googleapis.com/"
 
-    private val okHttpClient = OkHttpClient.Builder()
+    // Never log request URLs, headers, or bodies in any build configuration.
+    val okHttpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
+            level = HttpLoggingInterceptor.Level.NONE
         })
         .build()
 
@@ -90,6 +105,7 @@ object RetrofitClient {
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create())
             .build()
+
         retrofit.create(GeminiApiService::class.java)
     }
 }
