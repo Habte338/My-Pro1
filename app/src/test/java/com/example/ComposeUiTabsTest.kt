@@ -2,6 +2,8 @@ package com.example
 
 import android.app.Application
 import android.content.Context
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
@@ -36,10 +38,13 @@ class ComposeUiTabsTest {
     fun setup() {
         app = ApplicationProvider.getApplicationContext()
         ByokKeyManager(app).clearAllKeys()
+        kotlinx.coroutines.runBlocking {
+            WorkspaceViewModel.clearPreferences(app)
+        }
         viewModel = WorkspaceViewModel(app)
     }
 
-    // 1. Workspace (Transcribe tab) with User Interaction
+    // 1. Workspace (Transcribe tab) with User Interaction — kept voice on device & strictly on-demand translation
     @Test
     fun testWorkspaceTranscribeTabInteraction() {
         composeTestRule.setContent {
@@ -47,15 +52,61 @@ class ComposeUiTabsTest {
                 MainAppScreen(viewModel = viewModel)
             }
         }
-        composeTestRule.onNodeWithText("Workspace").assertExists()
+        composeTestRule.onNodeWithText("Voice").assertExists()
+        composeTestRule.onNodeWithTag("nav_tab_voice").assertExists()
+        composeTestRule.onNodeWithTag("nav_tab_tutor").assertExists()
+        composeTestRule.onNodeWithTag("nav_tab_library").assertExists()
+        composeTestRule.onNodeWithTag("nav_tab_ocr").assertExists()
+        composeTestRule.onNodeWithTag("nav_tab_review").assertExists()
+        composeTestRule.onNodeWithTag("nav_tab_settings").assertExists()
         composeTestRule.onNodeWithText("አቢሲኒያ Study").assertExists()
 
-        // Interaction: Tap "Preload Demo" action button
+        // Interaction 1: Tap "Preload Demo" -> keeps voice file on device and does NOT auto-translate
         composeTestRule.onNodeWithText("💾 Preload Demo").performScrollTo().assertExists().performClick()
         composeTestRule.waitUntil(timeoutMillis = 3000) {
-            viewModel.activeTranscriptionText.value.isNotBlank()
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            viewModel.activeTranscriptionText.value.isNotBlank() && viewModel.activeAudioFilePath.value != null
         }
+        val demoVoicePath = viewModel.activeAudioFilePath.value!!
         assertTrue("Preload demo must populate active transcription", viewModel.activeTranscriptionText.value.isNotBlank())
+        assertTrue(
+            "Kept voice must live in persistent voice_recordings directory",
+            demoVoicePath.contains("voice_recordings")
+        )
+        assertEquals("Translation must remain empty until user clicks Translate", "", viewModel.activeTranslationText.value)
+        assertEquals("Voice preload must NOT write into OCR box", "", viewModel.ocrExtractedText.value)
+
+        // Verify Kept on Device Play, Download & Delete buttons appear
+        composeTestRule.onNodeWithTag("kept_voice_card").performScrollTo().assertExists()
+        composeTestRule.onNodeWithTag("play_active_voice_button").assertExists()
+        composeTestRule.onNodeWithTag("download_active_voice_button").assertExists()
+        composeTestRule.onNodeWithTag("delete_active_voice_button").assertExists()
+
+        // Interaction 2: Tap Transcribe in offline mode -> STILL does not auto-translate
+        viewModel.toggleOfflineMode()
+        composeTestRule.onNodeWithTag("transcribe_button").performScrollTo().assertIsEnabled().performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("Transcribe must not auto-translate", "", viewModel.activeTranslationText.value)
+
+        // Interaction 3: Click Translate button -> populates translation ONLY on user click
+        composeTestRule.onNodeWithTag("translate_button").performScrollTo().assertIsEnabled().performClick()
+        composeTestRule.waitUntil(timeoutMillis = 3000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(25)
+            viewModel.activeTranslationText.value.isNotBlank()
+        }
+        assertTrue("Translation must populate after clicking Translate", viewModel.activeTranslationText.value.isNotBlank())
+
+        // Interaction 4: Click Delete on kept voice -> deletes file from disk and hides kept_voice_card
+        composeTestRule.onNodeWithTag("delete_active_voice_button").performScrollTo().assertIsEnabled().performClick()
+        composeTestRule.waitUntil(timeoutMillis = 3000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(25)
+            viewModel.activeAudioFilePath.value == null && !java.io.File(demoVoicePath).exists()
+        }
+        assertNull("Active voice path must clear after delete", viewModel.activeAudioFilePath.value)
+        assertFalse("Deleted voice file must be removed from disk", java.io.File(demoVoicePath).exists())
+        composeTestRule.onNodeWithTag("kept_voice_card").assertDoesNotExist()
     }
 
     // 2. Tutor AI tab with User Interaction
@@ -92,6 +143,7 @@ class ComposeUiTabsTest {
         }
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("📚 Stored Study Sessions").assertExists()
+        composeTestRule.onNodeWithTag("library_lazy_list").performScrollToNode(hasText("BYOK Library Test"))
         composeTestRule.onNodeWithText("BYOK Library Test").assertExists()
 
         // Interaction: Tap "Copy All" button on stored note card
@@ -99,9 +151,14 @@ class ComposeUiTabsTest {
         composeTestRule.waitForIdle()
     }
 
-    // 4. OCR tab with User Interaction
+    // 4. OCR tab with User Interaction — Scan extracts script ONLY into isolated OCR box, Translate runs ONLY on click
     @Test
     fun testOcrTabNavigationAndInteraction() {
+        viewModel.setOfflineMode(true)
+        // Seed distinct text in Voice Transcription box to prove OCR never overwrites Voice box
+        viewModel.updateActiveTranscriptionText("VOICE_ONLY_SENTINEL")
+        viewModel.updateActiveTranslationText("VOICE_TRANSLATION_SENTINEL")
+
         composeTestRule.setContent {
             MyApplicationTheme {
                 MainAppScreen(viewModel = viewModel)
@@ -111,10 +168,40 @@ class ComposeUiTabsTest {
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("OCR").assertExists()
 
-        // Interaction: Tap "Sample Doc" button
-        composeTestRule.onNodeWithText("📄 Sample Doc").assertExists().performClick()
-        composeTestRule.waitForIdle()
-        assertNotNull("Sample Doc interaction must select an image URI", viewModel.selectedOcrImageUri.value)
+        // Interaction 1: Tap "Sample Doc" button (loads off UI thread)
+        composeTestRule.onNodeWithTag("ocr_sample_doc_button").performScrollTo().assertIsEnabled().performClick()
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(25)
+            viewModel.selectedOcrImageUri.value != null ||
+                (viewModel.statusMessage.value?.startsWith("Error") == true)
+        }
+        assertNotNull(
+            "Sample Doc interaction must select an image URI (status=${viewModel.statusMessage.value})",
+            viewModel.selectedOcrImageUri.value
+        )
+
+        // Interaction 2: Tap Scan Document -> populates isolated ocrExtractedText ONLY, leaves translation blank & Voice box intact
+        composeTestRule.onNodeWithTag("ocr_scan_button").performScrollTo().assertIsEnabled().performClick()
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(25)
+            !viewModel.ocrLoading.value && viewModel.ocrExtractedText.value.isNotBlank()
+        }
+        assertTrue(viewModel.ocrExtractedText.value.isNotBlank())
+        assertEquals("OCR scan must NOT auto-translate", "", viewModel.ocrTranslationText.value)
+        assertEquals("OCR must NEVER overwrite Voice transcription box", "VOICE_ONLY_SENTINEL", viewModel.activeTranscriptionText.value)
+        assertEquals("OCR must NEVER overwrite Voice translation box", "VOICE_TRANSLATION_SENTINEL", viewModel.activeTranslationText.value)
+
+        // Interaction 3: Click Translate Script -> populates isolated ocrTranslationText ONLY on user demand
+        composeTestRule.onNodeWithTag("ocr_translate_button").performScrollTo().assertIsEnabled().performClick()
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(25)
+            viewModel.ocrTranslationText.value.isNotBlank()
+        }
+        assertTrue(viewModel.ocrTranslationText.value.isNotBlank())
+        assertEquals("OCR translate must NOT overwrite Voice translation box", "VOICE_TRANSLATION_SENTINEL", viewModel.activeTranslationText.value)
     }
 
     // 5. Review Screen with Multiple User Interactions (Fidel tap, Flashcard mastery toggle, Quiz submit)
@@ -328,6 +415,33 @@ class ComposeUiTabsTest {
         db.close()
     }
 
+    // DATA MIGRATION: Test Room v2 -> v3 Migration SQL Execution
+    @Test
+    fun testRoomMigration2To3SqlExecution() {
+        val helper = androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory()
+            .create(
+                androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(app)
+                    .name(null)
+                    .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(2) {
+                        override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                            db.execSQL("CREATE TABLE `transcriptions` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `title` TEXT NOT NULL, `amharicText` TEXT NOT NULL, `englishTranslation` TEXT NOT NULL, `durationSeconds` INTEGER NOT NULL, `filePath` TEXT, `timestamp` INTEGER NOT NULL)")
+                            db.execSQL("CREATE TABLE `chat_messages` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `role` TEXT NOT NULL, `text` TEXT NOT NULL, `timestamp` INTEGER NOT NULL)")
+                            db.execSQL("CREATE TABLE `flashcard_mastery` (`cardId` INTEGER NOT NULL PRIMARY KEY, `isMastered` INTEGER NOT NULL, `lastUpdated` INTEGER NOT NULL)")
+                            db.execSQL("CREATE TABLE `quiz_scores` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `score` INTEGER NOT NULL, `totalQuestions` INTEGER NOT NULL, `percentage` INTEGER NOT NULL, `timestamp` INTEGER NOT NULL)")
+                        }
+                        override fun onUpgrade(db: androidx.sqlite.db.SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+                    })
+                    .build()
+            )
+        val db = helper.writableDatabase
+        AppDatabase.MIGRATION_2_3.migrate(db)
+
+        val cursor = db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='voice_recordings'")
+        assertEquals("voice_recordings table must exist after MIGRATION_2_3", 1, cursor.count)
+        cursor.close()
+        db.close()
+    }
+
     @Test
     fun testViewModelRoomFlashcardAndQuizPersistence() {
         viewModel.toggleFlashcardMastery(1)
@@ -372,6 +486,18 @@ class ComposeUiTabsTest {
                 capturedModel = config.modelId
                 return "Mocked translation output"
             }
+
+            override suspend fun performImageOcr(
+                config: com.example.utils.DecryptedByokConfig,
+                base64Image: String,
+                mimeType: String,
+                prompt: String
+            ): String {
+                capturedKey = config.apiKey
+                capturedProvider = config.provider
+                capturedModel = config.modelId
+                return """{"originalLanguage":"Amharic","transcription":"ሰላም ጤና ይስጥልኝ"}"""
+            }
         }
 
         val dao = MockDao()
@@ -397,5 +523,183 @@ class ComposeUiTabsTest {
         assertEquals("valid-secret-key", capturedKey)
         assertEquals(ByokProvider.OPENAI, capturedProvider)
         assertEquals("gpt-test-model", capturedModel)
+
+        // Multi-provider OCR returns script ONLY with empty translation (no auto-translation)
+        val tmpImg = java.io.File.createTempFile("ocr_route_test", ".jpg").apply {
+            writeBytes(byteArrayOf(1, 2, 3, 4))
+            deleteOnExit()
+        }
+        val ocrRes = repo.performOcrOnImage(tmpImg)
+        assertNull(ocrRes.error)
+        assertEquals("Amharic", ocrRes.originalLanguage)
+        assertEquals("ሰላም ጤና ይስጥልኝ", ocrRes.transcription)
+        assertEquals("OCR repository result must not auto-translate", "", ocrRes.translation)
+    }
+
+    // Persistent Voice Recording Kept on Device, Library Search, and SAF Download Export Test
+    @Test
+    fun testKeptVoiceInLibrarySearchAndExport() {
+        viewModel.simulateDemoRecording()
+        composeTestRule.waitUntil(timeoutMillis = 3_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(20)
+            viewModel.activeAudioFilePath.value != null
+        }
+        val keptPath = viewModel.activeAudioFilePath.value!!
+        assertTrue(java.io.File(keptPath).exists())
+
+        // Save current session with kept voice file
+        viewModel.saveCurrentSession("Kept Voice Note")
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(25)
+            viewModel.transcriptionsList.value.any { it.filePath == keptPath }
+        }
+        val savedSession = viewModel.transcriptionsList.value.first { it.filePath == keptPath }
+
+        // Test exportAudioFileToUri writes exact bytes to user destination URI
+        val destFile = java.io.File(app.cacheDir, "downloaded_voice_copy.mp4")
+        if (destFile.exists()) destFile.delete()
+        viewModel.exportAudioFileToUri(app, keptPath, android.net.Uri.fromFile(destFile))
+        composeTestRule.waitUntil(timeoutMillis = 3_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(25)
+            destFile.exists() && destFile.length() == java.io.File(keptPath).length()
+        }
+        assertTrue("Exported audio file must match source size", destFile.length() == 2048L)
+
+        // Render Library tab & verify Play/Download buttons and live Search filter
+        composeTestRule.setContent {
+            MyApplicationTheme {
+                MainAppScreen(viewModel = viewModel)
+            }
+        }
+        composeTestRule.onNodeWithText("Library").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("library_lazy_list")
+            .performScrollToNode(hasTestTag("play_saved_voice_${savedSession.id}"))
+        composeTestRule.onNodeWithTag("play_saved_voice_${savedSession.id}").assertExists()
+        composeTestRule.onNodeWithTag("download_saved_voice_${savedSession.id}").assertExists()
+
+        // Search filter hides non-matching items when query doesn't match
+        composeTestRule.onNodeWithTag("library_lazy_list")
+            .performScrollToNode(hasTestTag("library_search_input"))
+        composeTestRule.onNodeWithTag("library_search_input").performTextInput("zzzz_no_match")
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("🔍 No Matching Notes").assertExists()
+    }
+
+    // Dark Theme Persistence Across Recreated ViewModel (DataStore)
+    @Test
+    fun testDarkThemePersistsAcrossViewModelRestart() {
+        try {
+            composeTestRule.setContent {
+                val isDark by viewModel.isDarkMode.collectAsState()
+                MyApplicationTheme(darkTheme = isDark) {
+                    MainAppScreen(viewModel = viewModel)
+                }
+            }
+            composeTestRule.onNodeWithTag("nav_tab_settings").performClick()
+            composeTestRule.waitForIdle()
+
+            // Ensure starting from false, then toggle dark mode ON via Settings UI switch
+            if (viewModel.isDarkMode.value) {
+                composeTestRule.onNodeWithTag("settings_dark_mode_switch").performScrollTo().performClick()
+                composeTestRule.waitForIdle()
+            }
+            composeTestRule.onNodeWithTag("settings_dark_mode_switch").performScrollTo().performClick()
+            composeTestRule.waitUntil(timeoutMillis = 3_000) {
+                org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+                viewModel.isDarkMode.value
+            }
+            // Allow DataStore IO write to flush, then instantiate a fresh ViewModel simulating app restart
+            Thread.sleep(250)
+            val restartedVm = WorkspaceViewModel(app)
+            composeTestRule.waitUntil(timeoutMillis = 3_000) {
+                org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+                Thread.sleep(25)
+                restartedVm.isDarkMode.value
+            }
+            assertTrue("Dark theme must restore as true after restarting ViewModel", restartedVm.isDarkMode.value)
+        } finally {
+            // Reset back to light mode so subsequent tests start cleanly
+            if (viewModel.isDarkMode.value) {
+                viewModel.toggleDarkMode()
+                Thread.sleep(150)
+            }
+        }
+    }
+
+    // Library Saved Voices Sub-Tab: Naming/Renaming, Transcribe Anytime & Deleting Voice Files
+    @Test
+    fun testLibrarySavedVoicesRenameTranscribeAndDelete() {
+        viewModel.toggleOfflineMode()
+        viewModel.updateActiveAudioDisplayName("Morning Amharic Practice")
+        viewModel.simulateDemoRecording()
+
+        composeTestRule.waitUntil(timeoutMillis = 3_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(25)
+            viewModel.voiceRecordingsList.value.any { it.name == "Morning Amharic Practice" }
+        }
+        val voice = viewModel.voiceRecordingsList.value.first { it.name == "Morning Amharic Practice" }
+        assertTrue("Voice file must exist on disk", java.io.File(voice.filePath).exists())
+
+        composeTestRule.setContent {
+            MyApplicationTheme {
+                MainAppScreen(viewModel = viewModel)
+            }
+        }
+
+        // Switch to Library -> Saved Voices sub-tab
+        composeTestRule.onNodeWithTag("nav_tab_library").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("library_voices_tab").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("voice_card_${voice.id}").assertExists()
+        composeTestRule.onNodeWithText("Morning Amharic Practice").assertExists()
+
+        // Rename voice via Library dialog
+        composeTestRule.onNodeWithTag("rename_voice_button_${voice.id}").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("rename_voice_input").performTextReplacement("Updated Greeting Clip")
+        composeTestRule.onNodeWithTag("confirm_rename_voice_button").performClick()
+        composeTestRule.waitUntil(timeoutMillis = 3_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(25)
+            viewModel.voiceRecordingsList.value.any { it.id == voice.id && it.name == "Updated Greeting Clip" }
+        }
+        composeTestRule.onNodeWithText("Updated Greeting Clip").assertExists()
+
+        // Tap Transcribe Anytime -> clears old text, loads this clip into Voice tab, and transcribes
+        viewModel.updateActiveTranscriptionText("")
+        composeTestRule.onNodeWithTag("library_lazy_list")
+            .performScrollToNode(hasTestTag("transcribe_library_voice_${voice.id}"))
+        composeTestRule.onNodeWithTag("transcribe_library_voice_${voice.id}").performClick()
+        composeTestRule.waitUntil(timeoutMillis = 3_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(25)
+            viewModel.activeTranscriptionText.value.isNotBlank()
+        }
+        composeTestRule.onNodeWithTag("voice_transcription_text_field").performScrollTo().assertExists()
+
+        // Return to Library -> Saved Voices and Delete the saved voice clip
+        composeTestRule.onNodeWithTag("nav_tab_library").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("library_voices_tab").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("library_lazy_list")
+            .performScrollToNode(hasTestTag("delete_voice_button_${voice.id}"))
+        composeTestRule.onNodeWithTag("delete_voice_button_${voice.id}").performClick()
+        composeTestRule.waitUntil(timeoutMillis = 3_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(25)
+            viewModel.voiceRecordingsList.value.none { it.id == voice.id } && !java.io.File(voice.filePath).exists()
+        }
+        assertFalse("Deleted voice file must be removed from disk", java.io.File(voice.filePath).exists())
+        composeTestRule.onNodeWithTag("voice_card_${voice.id}").assertDoesNotExist()
     }
 }

@@ -6,6 +6,7 @@ import com.example.data.db.ChatMessage
 import com.example.data.db.FlashcardMasteryEntity
 import com.example.data.db.QuizScoreEntity
 import com.example.data.db.TranscriptionSession
+import com.example.data.db.VoiceRecordingEntity
 import com.example.data.db.WorkspaceDao
 import com.example.ui.FidelSeries
 import com.example.utils.KeystoreCryptoManager
@@ -22,6 +23,7 @@ class MockDao : WorkspaceDao {
     private val chatMessages = mutableListOf<ChatMessage>()
     private val flashcardMastery = mutableMapOf<Int, FlashcardMasteryEntity>()
     private val quizScores = mutableListOf<QuizScoreEntity>()
+    private val voiceRecordings = mutableListOf<VoiceRecordingEntity>()
 
     override fun getAllTranscriptions(): Flow<List<TranscriptionSession>> = flow {
         emit(transcriptions.toList())
@@ -71,6 +73,37 @@ class MockDao : WorkspaceDao {
 
     override fun getBestQuizScore(): Flow<Int?> = flow {
         emit(quizScores.maxOfOrNull { it.score })
+    }
+
+    override fun getAllVoiceRecordings(): Flow<List<VoiceRecordingEntity>> = flow {
+        emit(voiceRecordings.toList())
+    }
+
+    override suspend fun insertVoiceRecording(recording: VoiceRecordingEntity): Long {
+        val nextId = if (recording.id == 0) (voiceRecordings.maxOfOrNull { it.id } ?: 0) + 1 else recording.id
+        val saved = recording.copy(id = nextId)
+        voiceRecordings.removeAll { it.id == saved.id }
+        voiceRecordings.add(saved)
+        return saved.id.toLong()
+    }
+
+    override suspend fun renameVoiceRecording(id: Int, newName: String) {
+        val idx = voiceRecordings.indexOfFirst { it.id == id }
+        if (idx >= 0) {
+            voiceRecordings[idx] = voiceRecordings[idx].copy(name = newName)
+        }
+    }
+
+    override suspend fun deleteVoiceRecordingById(id: Int) {
+        voiceRecordings.removeAll { it.id == id }
+    }
+
+    override suspend fun deleteVoiceRecordingByPath(filePath: String) {
+        voiceRecordings.removeAll { it.filePath == filePath }
+    }
+
+    override suspend fun getVoiceRecordingByPath(filePath: String): VoiceRecordingEntity? {
+        return voiceRecordings.firstOrNull { it.filePath == filePath }
     }
 }
 
@@ -285,5 +318,27 @@ class ExampleUnitTest {
         assertEquals(7, standardOrders.size)
         assertTrue(standardOrders[0].contains("ግዕዝ"))
         assertTrue(standardOrders[6].contains("ሳብዕ"))
+    }
+
+    @Test
+    fun testRetrofitLoggingDisabledAndGenerationConfigMaxTokens() {
+        val interceptors = com.example.data.api.RetrofitClient.okHttpClient.interceptors
+        val logging = interceptors.filterIsInstance<okhttp3.logging.HttpLoggingInterceptor>().firstOrNull()
+        assertNotNull(logging)
+        assertEquals(okhttp3.logging.HttpLoggingInterceptor.Level.NONE, logging?.level)
+
+        val moshi = Moshi.Builder().build()
+        val adapter = moshi.adapter(com.example.data.api.GenerationConfig::class.java)
+        val json = adapter.toJson(com.example.data.api.GenerationConfig(temperature = 0.1f, maxOutputTokens = 2048, responseMimeType = "application/json"))
+        assertTrue(json.contains("\"maxOutputTokens\":2048"))
+    }
+
+    @Test
+    fun testHttpErrorMappingNeverExposesSecrets() {
+        val adapter = com.example.data.api.ByokProviderAdapter()
+        val msg401 = adapter.mapHttpError(com.example.utils.ByokProvider.GEMINI, 401)
+        val msg404 = adapter.mapHttpError(com.example.utils.ByokProvider.OPENAI, 404)
+        assertTrue(msg401.contains("401"))
+        assertTrue(msg404.contains("404"))
     }
 }

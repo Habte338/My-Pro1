@@ -59,6 +59,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -177,12 +178,22 @@ fun MainAppScreen(viewModel: WorkspaceViewModel) {
                         RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
                     )
             ) {
-                // Transcribe Tab
+                // Transcribe (Voice) Tab
                 NavigationBarItem(
                     selected = activeTab == ActiveWorkspace.TRANSCRIBE,
                     onClick = { activeTab = ActiveWorkspace.TRANSCRIBE },
-                    icon = { Text("🎙️", fontSize = 22.sp) },
-                    label = { Text("Workspace", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.testTag("nav_tab_voice"),
+                    icon = { Text("🎙️", fontSize = 20.sp) },
+                    label = {
+                        Text(
+                            text = "Voice",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -196,8 +207,18 @@ fun MainAppScreen(viewModel: WorkspaceViewModel) {
                 NavigationBarItem(
                     selected = activeTab == ActiveWorkspace.TUTOR_BOT,
                     onClick = { activeTab = ActiveWorkspace.TUTOR_BOT },
-                    icon = { Text("💬", fontSize = 22.sp) },
-                    label = { Text("Tutor AI", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.testTag("nav_tab_tutor"),
+                    icon = { Text("💬", fontSize = 20.sp) },
+                    label = {
+                        Text(
+                            text = "Tutor AI",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -207,12 +228,22 @@ fun MainAppScreen(viewModel: WorkspaceViewModel) {
                     )
                 )
 
-                // History Tab
+                // History (Library) Tab
                 NavigationBarItem(
                     selected = activeTab == ActiveWorkspace.HISTORY,
                     onClick = { activeTab = ActiveWorkspace.HISTORY },
-                    icon = { Text("📚", fontSize = 22.sp) },
-                    label = { Text("Library", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.testTag("nav_tab_library"),
+                    icon = { Text("📚", fontSize = 20.sp) },
+                    label = {
+                        Text(
+                            text = "Library",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -226,8 +257,18 @@ fun MainAppScreen(viewModel: WorkspaceViewModel) {
                 NavigationBarItem(
                     selected = activeTab == ActiveWorkspace.OCR,
                     onClick = { activeTab = ActiveWorkspace.OCR },
+                    modifier = Modifier.testTag("nav_tab_ocr"),
                     icon = { Text("📷", fontSize = 20.sp) },
-                    label = { Text("OCR", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                    label = {
+                        Text(
+                            text = "OCR",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -241,8 +282,18 @@ fun MainAppScreen(viewModel: WorkspaceViewModel) {
                 NavigationBarItem(
                     selected = activeTab == ActiveWorkspace.REVIEW,
                     onClick = { activeTab = ActiveWorkspace.REVIEW },
+                    modifier = Modifier.testTag("nav_tab_review"),
                     icon = { Text("🔤", fontSize = 20.sp) },
-                    label = { Text("Review", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                    label = {
+                        Text(
+                            text = "Review",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -256,8 +307,18 @@ fun MainAppScreen(viewModel: WorkspaceViewModel) {
                 NavigationBarItem(
                     selected = activeTab == ActiveWorkspace.SETTINGS,
                     onClick = { activeTab = ActiveWorkspace.SETTINGS },
+                    modifier = Modifier.testTag("nav_tab_settings"),
                     icon = { Text("⚙️", fontSize = 20.sp) },
-                    label = { Text("Settings", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                    label = {
+                        Text(
+                            text = "Settings",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -327,13 +388,22 @@ fun MainAppScreen(viewModel: WorkspaceViewModel) {
                         )
                     }
 
+                    val byokKeys by viewModel.byokKeys.collectAsStateWithLifecycle()
+                    val activeKey = byokKeys.firstOrNull { it.isActive } ?: byokKeys.firstOrNull()
                     Box(
                         modifier = Modifier
                             .background(MaterialTheme.colorScheme.secondary, RoundedCornerShape(12.dp))
+                            .clickable { activeTab = ActiveWorkspace.SETTINGS }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "Gemini AI",
+                            text = activeKey?.let {
+                                when (it.provider) {
+                                    com.example.utils.ByokProvider.GEMINI -> "Gemini BYOK"
+                                    com.example.utils.ByokProvider.OPENAI -> "OpenAI BYOK"
+                                    com.example.utils.ByokProvider.ANTHROPIC -> "Claude BYOK"
+                                }
+                            } ?: "Add API Key",
                             color = MaterialTheme.colorScheme.onSecondary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
@@ -386,15 +456,16 @@ fun MainAppScreen(viewModel: WorkspaceViewModel) {
                     }
 
                     ActiveWorkspace.HISTORY -> {
-                        HistoryWorkspace(
+                        com.example.ui.HistoryWorkspace(
                             viewModel = viewModel,
                             transcriptions = transcriptions,
-                            clipboardManager = clipboardManager
+                            clipboardManager = clipboardManager,
+                            onSelectTab = { activeTab = it }
                         )
                     }
 
                     ActiveWorkspace.OCR -> {
-                        OcrWorkspaceScreen(viewModel = viewModel)
+                        com.example.ui.OcrWorkspaceScreen(viewModel = viewModel)
                     }
                     ActiveWorkspace.REVIEW -> {
                         com.example.ui.ReviewWorkspaceScreen(viewModel = viewModel)
@@ -423,41 +494,37 @@ fun TranscribeWorkspace(
     onSelectTab: (ActiveWorkspace) -> Unit
 ) {
     val durationState by viewModel.recordingDuration.collectAsStateWithLifecycle()
-    var subTab by remember { mutableStateOf(0) } // 0: Voice Desk, 1: Image OCR, 2: Study Notes & Settings
+    val activeAudioPath by viewModel.activeAudioFilePath.collectAsStateWithLifecycle()
+    val activeAudioName by viewModel.activeAudioFileName.collectAsStateWithLifecycle()
+    val activeAudioDisplayName by viewModel.activeAudioDisplayName.collectAsStateWithLifecycle()
+    val activeAudioSizeKb by viewModel.activeAudioSizeKb.collectAsStateWithLifecycle()
+    val playingAudioPath by viewModel.playingAudioPath.collectAsStateWithLifecycle()
+    val targetLang by viewModel.selectedTargetLang.collectAsStateWithLifecycle()
+    val detectedLanguage by viewModel.detectedLanguage.collectAsStateWithLifecycle()
+    val lastProcessingStats by viewModel.lastProcessingStats.collectAsStateWithLifecycle()
+    val studyBreakdownText by viewModel.studyBreakdownText.collectAsStateWithLifecycle()
+    val studyBreakdownLoading by viewModel.studyBreakdownLoading.collectAsStateWithLifecycle()
+
+    var subTab by remember { mutableStateOf(0) } // 0: Voice Desk, 1: Settings & Sync
 
     val context = LocalContext.current
-    
+
+    // SAF launcher to download the device-kept voice file to Downloads / user folder (zero permissions)
+    val downloadVoiceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("audio/*")
+    ) { destUri ->
+        val src = activeAudioPath
+        if (destUri != null && src != null) {
+            viewModel.exportAudioFileToUri(context, src, destUri)
+        }
+    }
+
     // File Picker for custom local audio imports
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
             viewModel.loadUploadedAudioFile(it, context)
-        }
-    }
-
-    // Pick visual media launch (Single image visual OCR)
-    val singleImageLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        uri?.let { viewModel.updateSelectedOcrImageUri(it) }
-    }
-
-    // Pick multiple visual media launch (Batch processing queue)
-    val batchImagesLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickMultipleVisualMedia()
-    ) { uris ->
-        if (!uris.isNullOrEmpty()) {
-            viewModel.addImageToBatchQueue(uris)
-        }
-    }
-
-    // Document audio batch queue launcher
-    val batchAudioLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetMultipleContents()
-    ) { uris ->
-        if (!uris.isNullOrEmpty()) {
-            viewModel.addAudioToBatchQueue(uris)
         }
     }
 
@@ -702,22 +769,150 @@ fun TranscribeWorkspace(
                             Text(batchProgress, color = MaterialTheme.colorScheme.secondary, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
-                        // Transcribe Button
-                        Button(
-                            onClick = { viewModel.triggerTranscription() },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        // Optional voice name input (applies before recording or saves/renames active clip)
+                        OutlinedTextField(
+                            value = activeAudioDisplayName,
+                            onValueChange = { viewModel.updateActiveAudioDisplayName(it) },
+                            label = { Text("Voice Clip Name (optional)", fontSize = 11.sp) },
+                            singleLine = true,
+                            trailingIcon = if (activeAudioPath != null && activeAudioDisplayName.isNotBlank()) {
+                                {
+                                    IconButton(
+                                        onClick = { viewModel.renameActiveVoiceRecording(activeAudioDisplayName) },
+                                        modifier = Modifier.testTag("rename_active_voice_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Save voice clip name",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            } else null,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(40.dp)
-                                .testTag("transcribe_button"),
-                            shape = RoundedCornerShape(20.dp)
+                                .padding(bottom = 8.dp)
+                                .testTag("active_voice_name_input"),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+
+                        // Kept Voice on Device Card (Play, Download & Delete)
+                        if (activeAudioPath != null) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp)
+                                    .testTag("kept_voice_card")
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text(
+                                            text = "💾 Kept on Device: ${activeAudioDisplayName.ifBlank { activeAudioName ?: "voice.mp4" }}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "${activeAudioName ?: "voice.mp4"}${activeAudioSizeKb?.let { " • ${it} KB" } ?: ""} • Also listed in Library -> Saved Voices",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        val isPlayingActive = playingAudioPath == activeAudioPath
+                                        FilledTonalButton(
+                                            onClick = { activeAudioPath?.let { viewModel.toggleAudioPlayback(it) } },
+                                            enabled = !isRecording,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(36.dp)
+                                                .testTag("play_active_voice_button"),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                            shape = RoundedCornerShape(16.dp)
+                                        ) {
+                                            Text(if (isPlayingActive) "⏹️ Stop" else "▶️ Play", fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                        }
+                                        OutlinedButton(
+                                            onClick = { downloadVoiceLauncher.launch(activeAudioName ?: "amharic_voice.mp4") },
+                                            enabled = !isRecording,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(36.dp)
+                                                .testTag("download_active_voice_button"),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                            shape = RoundedCornerShape(16.dp)
+                                        ) {
+                                            Text("⬇️ Save", fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                        }
+                                        OutlinedButton(
+                                            onClick = { viewModel.deleteActiveVoiceRecording() },
+                                            enabled = !isRecording,
+                                            border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f)),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(36.dp)
+                                                .testTag("delete_active_voice_button"),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                            shape = RoundedCornerShape(16.dp)
+                                        ) {
+                                            Text("🗑️ Delete", fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Transcribe Button + Cancel when active
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            Button(
+                                onClick = { viewModel.triggerTranscription() },
+                                enabled = !transcriptionLoading,
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(42.dp)
+                                    .testTag("transcribe_button"),
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                if (transcriptionLoading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Transcribing...", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                } else {
+                                    Text("✨ Transcribe Voice Audio", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
                             if (transcriptionLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
-                            } else {
-                                Text("✨ Transcribe Voice Audio", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                OutlinedButton(
+                                    onClick = { viewModel.cancelActiveProcessing() },
+                                    modifier = Modifier
+                                        .height(42.dp)
+                                        .testTag("cancel_processing_button"),
+                                    shape = RoundedCornerShape(20.dp)
+                                ) {
+                                    Text("Cancel", fontSize = 11.sp, color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -742,22 +937,56 @@ fun TranscribeWorkspace(
                                 .background(MaterialTheme.colorScheme.primary)
                         )
                         Column(modifier = Modifier.padding(16.dp).weight(1f)) {
-                            Text(
-                                text = "Transcription Workspace Text (የጽሑፍ ግልባጭ)",
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Transcription Workspace Text (የጽሑፍ ግልባጭ)",
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    if (detectedLanguage != null || lastProcessingStats != null) {
+                                        Text(
+                                            text = listOfNotNull(detectedLanguage, lastProcessingStats).joinToString(" • "),
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Row {
+                                    IconButton(
+                                        onClick = { viewModel.speakPronunciation(context, activeTranscription) },
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .testTag("speak_transcription_button")
+                                    ) {
+                                        Text("🔊", fontSize = 14.sp)
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            copyTextToClipboard(context, clipboardManager, "Transcription", activeTranscription)
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Text("📋", fontSize = 14.sp)
+                                    }
+                                }
+                            }
 
                             Spacer(modifier = Modifier.height(6.dp))
 
                             OutlinedTextField(
                                 value = activeTranscription,
                                 onValueChange = { viewModel.updateActiveTranscriptionText(it) },
-                                placeholder = { Text("Transcribed script appears here. You may edit to revise punctuation or transcription results.", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 12.sp) },
+                                placeholder = { Text("Transcribed script appears here. Translation runs only when you click Translate.", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 12.sp) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(95.dp),
+                                    .height(95.dp)
+                                    .testTag("voice_transcription_text_field"),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = MaterialTheme.colorScheme.onSurface,
                                     unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -771,34 +1000,112 @@ fun TranscribeWorkspace(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Translate / Quick Actions Trigger
-                            Button(
-                                onClick = { 
-                                    viewModel.triggerTranslation(activeTranscription)
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.secondary,
-                                    contentColor = MaterialTheme.colorScheme.onSecondary
-                                ),
-                                modifier = Modifier
-                                    .align(Alignment.End)
-                                    .height(36.dp)
-                                    .testTag("translate_button"),
-                                shape = RoundedCornerShape(18.dp)
+                            // On-demand Target Language selector + Study Breakdown + Translate Trigger
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                if (translationLoading) {
-                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onSecondary)
-                                } else {
-                                    Text("🌐 Translate Text", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                var expandedVoiceTarget by remember { mutableStateOf(false) }
+                                val displayTarget = if (targetLang == "None") "English" else targetLang
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(42.dp)
+                                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+                                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                        .clickable { expandedVoiceTarget = true }
+                                        .padding(horizontal = 8.dp),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    Text("To: $displayTarget", fontSize = 10.sp, maxLines = 1, fontWeight = FontWeight.Medium)
+                                    DropdownMenu(expanded = expandedVoiceTarget, onDismissRequest = { expandedVoiceTarget = false }) {
+                                        listOf("English", "Amharic (አማርኛ)", "Tigrinya (ትግርኛ)", "Oromo (Afaan Oromoo)", "Somali (Af-Soomaali)", "Arabic", "French").forEach { lang ->
+                                            DropdownMenuItem(text = { Text(lang) }, onClick = {
+                                                viewModel.updateSelectedTargetLang(lang)
+                                                expandedVoiceTarget = false
+                                            })
+                                        }
+                                    }
+                                }
+
+                                OutlinedButton(
+                                    onClick = { viewModel.triggerStudyBreakdown(activeTranscription) },
+                                    enabled = !studyBreakdownLoading && activeTranscription.isNotBlank(),
+                                    modifier = Modifier
+                                        .height(42.dp)
+                                        .testTag("study_breakdown_button"),
+                                    shape = RoundedCornerShape(18.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                                ) {
+                                    Text(if (studyBreakdownLoading) "..." else "✨ Breakdown", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                }
+
+                                Button(
+                                    onClick = { viewModel.triggerTranslation(activeTranscription) },
+                                    enabled = !translationLoading && activeTranscription.isNotBlank(),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.secondary,
+                                        contentColor = MaterialTheme.colorScheme.onSecondary
+                                    ),
+                                    modifier = Modifier
+                                        .height(42.dp)
+                                        .testTag("translate_button"),
+                                    shape = RoundedCornerShape(18.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                ) {
+                                    if (translationLoading) {
+                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), color = MaterialTheme.colorScheme.onSecondary, strokeWidth = 2.dp)
+                                    } else {
+                                        Text("🌐 Translate Text", fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                // On-demand Study Breakdown Card
+                if (studyBreakdownLoading || studyBreakdownText.isNotBlank()) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)), RoundedCornerShape(20.dp)),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("✨ Vocabulary & Grammar Breakdown", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                TextButton(onClick = { viewModel.clearStudyBreakdown() }, modifier = Modifier.height(28.dp)) {
+                                    Text("Dismiss", fontSize = 10.sp)
+                                }
+                            }
+                            Text(
+                                text = "AI-generated study note — Unverified, needs native-speaker or linguist review.",
+                                fontSize = 10.sp,
+                                color = Color(0xFFB45309),
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            if (studyBreakdownLoading) {
+                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            } else {
+                                SelectionContainer {
+                                    Text(studyBreakdownText, fontSize = 12.sp, lineHeight = 18.sp)
+                                }
+                            }
+                        }
+                    }
+                }
 
-                // Active Translation Outputs (Integrated on the same Voice Desk page!)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Active Translation Outputs (Populated ONLY when user clicks Translate)
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -818,7 +1125,7 @@ fun TranscribeWorkspace(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("📝", fontSize = 16.sp, modifier = Modifier.padding(end = 6.dp))
                                 Text(
-                                    text = "Workspace Translation Output",
+                                    text = "On-Demand Translation (${if (targetLang == "None") "English" else targetLang})",
                                     color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
@@ -827,11 +1134,9 @@ fun TranscribeWorkspace(
 
                             IconButton(
                                 onClick = {
-                                    if (activeTranslation.isNotBlank()) {
-                                        clipboardManager.setText(AnnotatedString(activeTranslation))
-                                    }
+                                    copyTextToClipboard(context, clipboardManager, "Translation", activeTranslation)
                                 },
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(28.dp)
                             ) {
                                 Text("📋", fontSize = 14.sp)
                             }
@@ -842,10 +1147,11 @@ fun TranscribeWorkspace(
                         OutlinedTextField(
                             value = activeTranslation,
                             onValueChange = { viewModel.updateActiveTranslationText(it) },
-                            placeholder = { Text("Translation output appears here.", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 12.sp) },
+                            placeholder = { Text("Tap 'Translate Text' above when you want a translation.", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 12.sp) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(85.dp),
+                                .height(85.dp)
+                                .testTag("voice_translation_text_field"),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = MaterialTheme.colorScheme.onSurface,
                                 unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -1019,7 +1325,7 @@ fun TranscribeWorkspace(
                             Switch(checked = isDark, onCheckedChange = { viewModel.toggleDarkMode() })
                         }
 
-                        Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
 
                         // 2. Offline Mode Switch
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -1030,7 +1336,7 @@ fun TranscribeWorkspace(
                             Switch(checked = isOffline, onCheckedChange = { viewModel.toggleOfflineMode() })
                         }
 
-                        Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
 
                         // 3. Database Encryption Switch
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -1388,1057 +1694,6 @@ fun ChatBubbleItem(message: ChatMessage) {
                     fontSize = 14.sp,
                     lineHeight = 18.sp
                 )
-            }
-        }
-    }
-}
-
-fun sharePdfReport(context: Context, session: TranscriptionSession, decryptedAmharic: String, decryptedEnglish: String) {
-    try {
-        val pdfDocument = android.graphics.pdf.PdfDocument()
-        val pageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, 1).create()
-        val page = pdfDocument.startPage(pageInfo)
-        val canvas = page.canvas
-        val paint = android.graphics.Paint()
-        
-        paint.textSize = 20f
-        paint.isFakeBoldText = true
-        canvas.drawText("Abyssinia Study Session Report", 40f, 60f, paint)
-        
-        paint.textSize = 12f
-        paint.isFakeBoldText = false
-        paint.color = android.graphics.Color.DKGRAY
-        canvas.drawText("Title: ${session.title}", 40f, 100f, paint)
-        canvas.drawText("Duration: ${session.durationSeconds}s", 40f, 120f, paint)
-        
-        paint.color = android.graphics.Color.BLACK
-        paint.textSize = 14f
-        paint.isFakeBoldText = true
-        canvas.drawText("Amharic Text:", 40f, 160f, paint)
-        
-        paint.textSize = 12f
-        paint.isFakeBoldText = false
-        var y = 190f
-        decryptedAmharic.split("\n").forEach { line ->
-            if (y < 400f) {
-                canvas.drawText(line, 40f, y, paint)
-                y += 18f
-            }
-        }
-        
-        paint.textSize = 14f
-        paint.isFakeBoldText = true
-        canvas.drawText("English Translation:", 40f, 440f, paint)
-        
-        paint.textSize = 12f
-        paint.isFakeBoldText = false
-        y = 470f
-        decryptedEnglish.split("\n").forEach { line ->
-            if (y < 800f) {
-                canvas.drawText(line, 40f, y, paint)
-                y += 18f
-            }
-        }
-        
-        pdfDocument.finishPage(page)
-        
-        val file = java.io.File(context.cacheDir, "Abyssinia_Study_Report_${session.id}.pdf")
-        pdfDocument.writeTo(file.outputStream())
-        pdfDocument.close()
-        
-        val contentUri = androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.provider",
-            file
-        )
-        
-        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-            type = "application/pdf"
-            putExtra(android.content.Intent.EXTRA_STREAM, contentUri)
-            putExtra(android.content.Intent.EXTRA_SUBJECT, "Share Amharic Study Note Document")
-            putExtra(android.content.Intent.EXTRA_TEXT, "Exported PDF study notes from Abyssinia Study Workspace.")
-            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(android.content.Intent.createChooser(intent, "Share PDF Note Report"))
-    } catch (e: Exception) {
-        Toast.makeText(context, "Error sharing PDF: ${e.message}", Toast.LENGTH_LONG).show()
-    }
-}
-
-fun shareTextFile(context: Context, session: TranscriptionSession, decryptedAmharic: String, decryptedEnglish: String) {
-    try {
-        val file = java.io.File(context.cacheDir, "Abyssinia_Study_Text_${session.id}.txt")
-        val content = """
-            Abyssinia Study Workspace Report
-            Title: ${session.title}
-            Duration: ${session.durationSeconds}s
-            
-            [Amharic Script Transcription]
-            $decryptedAmharic
-            
-            [Translation Output]
-            $decryptedEnglish
-        """.trimIndent()
-        
-        file.writeText(content)
-        val contentUri = androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.provider",
-            file
-        )
-        
-        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(android.content.Intent.EXTRA_STREAM, contentUri)
-            putExtra(android.content.Intent.EXTRA_SUBJECT, "Exported Study Text file")
-            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(android.content.Intent.createChooser(intent, "Share Raw TXT document"))
-    } catch (e: Exception) {
-        Toast.makeText(context, "Error sharing text file: ${e.message}", Toast.LENGTH_LONG).show()
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun HistoryWorkspace(
-    viewModel: WorkspaceViewModel,
-    transcriptions: List<TranscriptionSession>,
-    clipboardManager: androidx.compose.ui.platform.ClipboardManager
-) {
-    val context = LocalContext.current
-    
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = 16.dp)
-    ) {
-        item {
-            Text(
-                text = "📚 Stored Study Sessions",
-                color = MaterialTheme.colorScheme.onBackground,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(vertical = 4.dp)
-            )
-        }
-
-        if (transcriptions.isEmpty()) {
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
-                            RoundedCornerShape(20.dp)
-                        ),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text("📂 Workspace Empty", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = "Record or transcribe Amharic vocabulary and hit the Save button to start building your portfolio of studies.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
-                }
-            }
-        } else {
-            items(transcriptions) { session ->
-                LaunchedEffect(session.id) {
-                    viewModel.onNoteAccessed(session)
-                }
-                val decryptedAmharic = remember(session.amharicText) { viewModel.decryptString(session.amharicText) }
-                val decryptedEnglish = remember(session.englishTranslation) { viewModel.decryptString(session.englishTranslation) }
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
-                            RoundedCornerShape(24.dp)
-                        ),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = session.title,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "🎤 Duration: ${session.durationSeconds}s",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.sp
-                                )
-                            }
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Button(
-                                    onClick = {
-                                        copyTextToClipboard(
-                                            context,
-                                            clipboardManager,
-                                            "Full Session",
-                                            "${session.title}\n\n[Amharic / Ge'ez]:\n$decryptedAmharic\n\n[Translation]:\n$decryptedEnglish"
-                                        )
-                                    },
-                                    modifier = Modifier.height(34.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                                    shape = RoundedCornerShape(17.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                                ) {
-                                    Text("📋 Copy All", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                }
-
-                                Spacer(modifier = Modifier.width(4.dp))
-
-                                IconButton(
-                                    onClick = {
-                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(Intent.EXTRA_SUBJECT, session.title)
-                                            putExtra(Intent.EXTRA_TEXT, "${session.title}\n\n$decryptedAmharic\n\nTranslation:\n$decryptedEnglish")
-                                        }
-                                        context.startActivity(Intent.createChooser(shareIntent, "Share Study Note"))
-                                    },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Share,
-                                        contentDescription = "Share Session",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-
-                                IconButton(
-                                    onClick = { viewModel.deleteSession(session.id) },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Delete Session",
-                                        tint = Color(0xFFEF4444),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        // Share / Export Action buttons row!
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { sharePdfReport(context, session, decryptedAmharic, decryptedEnglish) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(32.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                            ) {
-                                Text("📄 Export PDF", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                            }
-
-                            OutlinedButton(
-                                onClick = { shareTextFile(context, session, decryptedAmharic, decryptedEnglish) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(32.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                            ) {
-                                Text("💾 Export .TXT", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Amharic Container Box (Soft violet tinted card with explicit copy button and tap-to-copy)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f), RoundedCornerShape(14.dp))
-                                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)), RoundedCornerShape(14.dp))
-                                .padding(12.dp)
-                        ) {
-                            Column {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "የአማርኛ ግልባጭ (Amharic Transcription)",
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    FilledTonalButton(
-                                        onClick = {
-                                            copyTextToClipboard(
-                                                context,
-                                                clipboardManager,
-                                                "Amharic Script",
-                                                decryptedAmharic
-                                            )
-                                        },
-                                        modifier = Modifier.height(28.dp),
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                        shape = RoundedCornerShape(14.dp)
-                                    ) {
-                                        Text("📋 Copy Amharic", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(6.dp))
-                                SelectionContainer {
-                                    Text(
-                                        text = decryptedAmharic,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontSize = 13.sp,
-                                        lineHeight = 18.sp
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // English Container Box (Soft tinted card with explicit copy button and tap-to-copy)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-                                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)), RoundedCornerShape(14.dp))
-                                .padding(12.dp)
-                        ) {
-                            Column {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "English Translation",
-                                        color = MaterialTheme.colorScheme.secondary,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    FilledTonalButton(
-                                        onClick = {
-                                            copyTextToClipboard(
-                                                context,
-                                                clipboardManager,
-                                                "English Translation",
-                                                decryptedEnglish
-                                            )
-                                        },
-                                        modifier = Modifier.height(28.dp),
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                        shape = RoundedCornerShape(14.dp)
-                                    ) {
-                                        Text("📋 Copy Translation", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(6.dp))
-                                SelectionContainer {
-                                    Text(
-                                        text = decryptedEnglish,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontSize = 13.sp,
-                                        lineHeight = 18.sp
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// Custom model representing Fidel syllables
-data class FidelSyllable(
-    val character: String,
-    val translation: String,
-    val pronuciation: String
-)
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun OcrWorkspaceScreen(viewModel: WorkspaceViewModel) {
-    val context = LocalContext.current
-    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
-    
-    val selectedOcrUri by viewModel.selectedOcrImageUri.collectAsStateWithLifecycle()
-    val imageBatchQueue by viewModel.imageBatchQueue.collectAsStateWithLifecycle()
-    val isBatchProcessing by viewModel.isBatchProcessing.collectAsStateWithLifecycle()
-    val batchProgress by viewModel.batchProgressMessage.collectAsStateWithLifecycle()
-    
-    val sourceLang by viewModel.selectedSourceLang.collectAsStateWithLifecycle()
-    val targetLang by viewModel.selectedTargetLang.collectAsStateWithLifecycle()
-    
-    val transcriptionLoading by viewModel.transcriptionLoading.collectAsStateWithLifecycle()
-    val activeTranscription by viewModel.activeTranscriptionText.collectAsStateWithLifecycle()
-    val activeTranslation by viewModel.activeTranslationText.collectAsStateWithLifecycle()
-
-    var noteTitleInput by remember { mutableStateOf("") }
-
-    var activeCameraUri by remember { mutableStateOf<Uri?>(null) }
-
-    // Camera picture taker launcher
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success && activeCameraUri != null) {
-            viewModel.updateSelectedOcrImageUri(activeCameraUri!!)
-            Toast.makeText(context, "Photo captured! Ready to scan.", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(context, "Camera photo capture cancelled or failed.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // Camera permission request launcher
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            try {
-                val photoFile = java.io.File(context.cacheDir, "camera_capture_ocr_${System.currentTimeMillis()}.jpg")
-                photoFile.parentFile?.mkdirs()
-                if (!photoFile.exists()) {
-                    photoFile.createNewFile()
-                }
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.provider",
-                    photoFile
-                )
-                activeCameraUri = uri
-                cameraLauncher.launch(uri)
-            } catch (e: Exception) {
-                Toast.makeText(context, "Camera error: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            Toast.makeText(context, "Camera permission is required to capture documents.", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    fun launchCameraFlow() {
-        val hasCamPermission = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
-        if (hasCamPermission) {
-            try {
-                val photoFile = java.io.File(context.cacheDir, "camera_capture_ocr_${System.currentTimeMillis()}.jpg")
-                photoFile.parentFile?.mkdirs()
-                if (!photoFile.exists()) {
-                    photoFile.createNewFile()
-                }
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.provider",
-                    photoFile
-                )
-                activeCameraUri = uri
-                cameraLauncher.launch(uri)
-            } catch (e: Exception) {
-                Toast.makeText(context, "Camera error: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
-    }
-
-    // Generic file fallback picker
-    val genericImagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null) {
-            viewModel.updateSelectedOcrImageUri(uri)
-            Toast.makeText(context, "Image selected! Ready to scan.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // Pick visual media launch (Single image visual OCR)
-    val singleImageLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        if (uri != null) {
-            viewModel.updateSelectedOcrImageUri(uri)
-            Toast.makeText(context, "Image selected! Ready to scan.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // Pick multiple visual media launch (Batch processing queue)
-    val batchImagesLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickMultipleVisualMedia()
-    ) { uris ->
-        if (!uris.isNullOrEmpty()) {
-            viewModel.addImageToBatchQueue(uris)
-        }
-    }
-
-    // Fast image preview decoder for UI feedback
-    val previewBitmap = remember(selectedOcrUri) {
-        selectedOcrUri?.let { uri ->
-            try {
-                context.contentResolver.openInputStream(uri)?.use { stream ->
-                    val options = BitmapFactory.Options().apply {
-                        inSampleSize = 2
-                    }
-                    BitmapFactory.decodeStream(stream, null, options)
-                }
-            } catch (_: Exception) {
-                null
-            }
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)), RoundedCornerShape(24.dp)),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(24.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("📷 Optical Character Recognition (OCR) Desk", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                Text("Supports printed text and handwritten document scans for Amharic, Tigrinya, Oromo, Somali, etc., with automatic original language/script detection.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Language selection options
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Language Script", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        var expandedSource by remember { mutableStateOf(false) }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(38.dp)
-                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                                .clickable { expandedSource = true }
-                                .padding(horizontal = 8.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Text(sourceLang, fontSize = 11.sp)
-                            DropdownMenu(expanded = expandedSource, onDismissRequest = { expandedSource = false }) {
-                                listOf("Auto-Detect", "Amharic (አማርኛ)", "Tigrinya (ትግርኛ)", "Oromo (Afaan Oromoo)", "Somali (Af-Soomaali)", "English").forEach { lang ->
-                                    DropdownMenuItem(text = { Text(lang) }, onClick = {
-                                        viewModel.updateSelectedSourceLang(lang)
-                                        expandedSource = false
-                                    })
-                                }
-                            }
-                        }
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Translate Target", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                        var expandedTarget by remember { mutableStateOf(false) }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(38.dp)
-                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                                .clickable { expandedTarget = true }
-                                .padding(horizontal = 8.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Text(targetLang, fontSize = 11.sp)
-                            DropdownMenu(expanded = expandedTarget, onDismissRequest = { expandedTarget = false }) {
-                                listOf("None", "English", "Amharic (አማርኛ)", "Tigrinya (ትግርኛ)", "Oromo (Afaan Oromoo)", "Somali (Af-Soomaali)").forEach { lang ->
-                                    DropdownMenuItem(text = { Text(lang) }, onClick = {
-                                        viewModel.updateSelectedTargetLang(lang)
-                                        expandedTarget = false
-                                    })
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Picker and Camera launch buttons
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Button(
-                        onClick = { launchCameraFlow() },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(38.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("📸 Camera", fontSize = 10.sp, maxLines = 1)
-                    }
-
-                    Button(
-                        onClick = {
-                            try {
-                                singleImageLauncher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                            } catch (_: Exception) {
-                                genericImagePickerLauncher.launch("image/*")
-                            }
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(38.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("🏞️ Gallery", fontSize = 10.sp, maxLines = 1)
-                    }
-
-                    FilledTonalButton(
-                        onClick = { viewModel.loadSampleOcrDocument(context) },
-                        modifier = Modifier
-                            .weight(1.1f)
-                            .height(38.dp),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("📄 Sample Doc", fontSize = 10.sp, maxLines = 1)
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            try {
-                                batchImagesLauncher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                            } catch (_: Exception) {
-                                genericImagePickerLauncher.launch("image/*")
-                            }
-                        },
-                        modifier = Modifier
-                            .weight(0.9f)
-                            .height(38.dp),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("📚 Batch", fontSize = 10.sp, maxLines = 1)
-                    }
-                }
-
-                // Batch Queue Indicators
-                if (imageBatchQueue.isNotEmpty()) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f))
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            Text("📸 Batch OCR Images: ${imageBatchQueue.size} Files Selected", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Row(modifier = Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
-                                    onClick = { viewModel.processImageBatch(context) },
-                                    modifier = Modifier.weight(1f).height(32.dp),
-                                    shape = RoundedCornerShape(16.dp)
-                                ) {
-                                    Text("Run Batch OCR", fontSize = 10.sp)
-                                }
-                                OutlinedButton(
-                                    onClick = { viewModel.clearImageBatchQueue() },
-                                    modifier = Modifier.weight(1f).height(32.dp),
-                                    shape = RoundedCornerShape(16.dp)
-                                ) {
-                                    Text("Clear Queue", fontSize = 10.sp)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (isBatchProcessing && batchProgress.isNotEmpty()) {
-                    Text(batchProgress, color = MaterialTheme.colorScheme.secondary, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
-                }
-
-                // Selected single image preview and Scan Button
-                if (selectedOcrUri != null) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("📄 Document Image Ready for Scan", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                                TextButton(
-                                    onClick = { viewModel.updateSelectedOcrImageUri(null) },
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                                    modifier = Modifier.height(28.dp)
-                                ) {
-                                    Text("✕ Remove", fontSize = 11.sp, color = Color(0xFFEF4444))
-                                }
-                            }
-
-                            if (previewBitmap != null) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                androidx.compose.foundation.Image(
-                                    bitmap = previewBitmap.asImageBitmap(),
-                                    contentDescription = "Selected document preview",
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(150.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(Color.Black.copy(alpha = 0.05f)),
-                                    contentScale = ContentScale.Fit
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Button(
-                                onClick = { viewModel.triggerImageOcr(context) },
-                                enabled = !transcriptionLoading,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(44.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                if (transcriptionLoading) {
-                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Scanning & Transcribing Script...", fontSize = 12.sp, color = Color.White)
-                                } else {
-                                    Text("🔍 Scan Document with Gemini OCR", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Handwriting Style Canvas
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)), RoundedCornerShape(24.dp)),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("✍️ Personal Handwriting Style Trainer", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text("Trace complex Ge'ez syllables or letters below. This feeds into personalized script recognition profiles.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                var charInputText by remember { mutableStateOf("ሀ") }
-                val points = remember { mutableStateListOf<androidx.compose.ui.geometry.Offset>() }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(130.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                        .clip(RoundedCornerShape(12.dp))
-                ) {
-                    androidx.compose.foundation.Canvas(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(Unit) {
-                                detectDragGestures(
-                                    onDragStart = { points.add(it) },
-                                    onDrag = { change, _ ->
-                                        change.consume()
-                                        points.add(change.position)
-                                    },
-                                    onDragEnd = { points.add(androidx.compose.ui.geometry.Offset.Unspecified) }
-                                )
-                            }
-                    ) {
-                        for (i in 0 until points.size - 1) {
-                            if (points[i] != androidx.compose.ui.geometry.Offset.Unspecified && points[i+1] != androidx.compose.ui.geometry.Offset.Unspecified) {
-                                drawLine(
-                                    color = Color(0xFF10B981),
-                                    start = points[i],
-                                    end = points[i+1],
-                                    strokeWidth = 6f
-                                )
-                            }
-                        }
-                    }
-
-                    if (points.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Draw Letter Here with Finger", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = charInputText,
-                        onValueChange = { charInputText = it },
-                        label = { Text("Char") },
-                        modifier = Modifier.width(90.dp).height(50.dp),
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary)
-                    )
-
-                    Button(
-                        onClick = {
-                            if (charInputText.isNotEmpty()) {
-                                viewModel.addHandwritingTrainingStyle(charInputText)
-                                points.clear()
-                            }
-                        },
-                        modifier = Modifier.weight(1f).height(38.dp),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("Register Style", fontSize = 11.sp, maxLines = 1)
-                    }
-
-                    OutlinedButton(
-                        onClick = { points.clear() },
-                        modifier = Modifier.height(38.dp),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("Clear Pad", fontSize = 11.sp)
-                    }
-                }
-
-                val trainedProfiles by viewModel.savedHandwritingStyles.collectAsStateWithLifecycle()
-                if (trainedProfiles.isNotEmpty()) {
-                    Text(
-                        "Registered Style Profiles: ${trainedProfiles.joinToString(", ")}",
-                        fontSize = 11.sp,
-                        modifier = Modifier.padding(top = 8.dp),
-                        color = MaterialTheme.colorScheme.secondary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        // --- EXTREMELY HELPFUL DETAILED SCRIPT & TRANSLATION OUTPUT DIRECTLY ON OCR PAGE! ---
-        // Original Script output box
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.06f)), RoundedCornerShape(24.dp)),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-                Box(
-                    modifier = Modifier
-                        .width(6.dp)
-                        .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.primary)
-                )
-                Column(modifier = Modifier.padding(16.dp).weight(1f)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "OCR / Transcription Original Script (ጽሑፍ)",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        IconButton(
-                            onClick = {
-                                copyTextToClipboard(
-                                    context,
-                                    clipboardManager,
-                                    "Original Script",
-                                    activeTranscription
-                                )
-                            },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Text("📋", fontSize = 14.sp)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    SelectionContainer {
-                        OutlinedTextField(
-                            value = activeTranscription,
-                            onValueChange = { viewModel.updateActiveTranscriptionText(it) },
-                            placeholder = { Text("Recognized script appears here. Edit to modify results directly if needed.", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 12.sp) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(100.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Button(
-                        onClick = { viewModel.triggerTranslation(activeTranscription) },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                        modifier = Modifier.align(Alignment.End).height(36.dp),
-                        shape = RoundedCornerShape(18.dp)
-                    ) {
-                        Text("🌐 Translate Script", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                    }
-                }
-            }
-        }
-
-        // Translation output box
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)), RoundedCornerShape(24.dp)),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("📝", fontSize = 16.sp, modifier = Modifier.padding(end = 6.dp))
-                        Text(
-                            text = "OCR / Transcription English Translation",
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    IconButton(
-                        onClick = {
-                            copyTextToClipboard(
-                                context,
-                                clipboardManager,
-                                "Translation",
-                                activeTranslation
-                            )
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Text("📋", fontSize = 14.sp)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                SelectionContainer {
-                    OutlinedTextField(
-                        value = activeTranslation,
-                        onValueChange = { viewModel.updateActiveTranslationText(it) },
-                        placeholder = { Text("Translation output appears here.", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 12.sp) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(90.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-            }
-        }
-
-        // Archive / Save Note directly on the page!
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)), RoundedCornerShape(24.dp)),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Text(
-                    text = "💾 Save OCR/Transcription Result to Library",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                OutlinedTextField(
-                    value = noteTitleInput,
-                    onValueChange = { noteTitleInput = it },
-                    label = { Text("Note Title (e.g. OCR Document Scan)") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-                    ),
-                    shape = RoundedCornerShape(10.dp)
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Button(
-                    onClick = {
-                        viewModel.saveCurrentSession(noteTitleInput)
-                        noteTitleInput = ""
-                        Toast.makeText(context, "Note Saved to Library!", Toast.LENGTH_SHORT).show()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(40.dp),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Text("Archive Study Note in Library", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
-                }
             }
         }
     }

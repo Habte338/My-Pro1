@@ -208,7 +208,7 @@ fun SettingsWorkspaceScreen(viewModel: WorkspaceViewModel) {
                 if (!selectedProvider.supportsMultimodal) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "${selectedProvider.displayName} supports Tutor AI chat & text translation. Audio transcription & visual OCR require an active Gemini key.",
+                        text = "${selectedProvider.displayName} supports Tutor AI chat, visual OCR & text translation. Voice audio transcription requires an active Gemini key.",
                         fontSize = 10.sp,
                         color = Color(0xFFB45309)
                     )
@@ -475,7 +475,11 @@ fun SettingsWorkspaceScreen(viewModel: WorkspaceViewModel) {
                         Text("Dark Theme", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         Text("Switch between high-contrast dark and light modes", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Switch(checked = isDarkMode, onCheckedChange = { viewModel.toggleDarkMode() })
+                    Switch(
+                        checked = isDarkMode,
+                        onCheckedChange = { viewModel.toggleDarkMode() },
+                        modifier = Modifier.testTag("settings_dark_mode_switch")
+                    )
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))

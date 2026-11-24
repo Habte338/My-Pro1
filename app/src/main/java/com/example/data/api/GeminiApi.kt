@@ -44,6 +44,7 @@ data class InlineData(
 @JsonClass(generateAdapter = true)
 data class GenerationConfig(
     @Json(name = "temperature") val temperature: Float? = null,
+    @Json(name = "maxOutputTokens") val maxOutputTokens: Int? = null,
     @Json(name = "responseMimeType") val responseMimeType: String? = null
 )
 
@@ -91,9 +92,9 @@ object RetrofitClient {
 
     // Never log request URLs, headers, or bodies in any build configuration.
     val okHttpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .addInterceptor(HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.NONE
         })

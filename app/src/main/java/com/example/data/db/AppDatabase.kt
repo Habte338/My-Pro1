@@ -45,6 +45,16 @@ data class QuizScoreEntity(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "voice_recordings")
+data class VoiceRecordingEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val name: String,
+    val filePath: String,
+    val durationSeconds: Int,
+    val sizeBytes: Long,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
 @Dao
 interface WorkspaceDao {
     @Query("SELECT * FROM transcriptions ORDER BY timestamp DESC")
@@ -84,6 +94,25 @@ interface WorkspaceDao {
 
     @Query("SELECT MAX(score) FROM quiz_scores")
     fun getBestQuizScore(): Flow<Int?>
+
+    // Saved voice recordings library persistence
+    @Query("SELECT * FROM voice_recordings ORDER BY createdAt DESC")
+    fun getAllVoiceRecordings(): Flow<List<VoiceRecordingEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertVoiceRecording(recording: VoiceRecordingEntity): Long
+
+    @Query("UPDATE voice_recordings SET name = :newName WHERE id = :id")
+    suspend fun renameVoiceRecording(id: Int, newName: String)
+
+    @Query("DELETE FROM voice_recordings WHERE id = :id")
+    suspend fun deleteVoiceRecordingById(id: Int)
+
+    @Query("DELETE FROM voice_recordings WHERE filePath = :filePath")
+    suspend fun deleteVoiceRecordingByPath(filePath: String)
+
+    @Query("SELECT * FROM voice_recordings WHERE filePath = :filePath LIMIT 1")
+    suspend fun getVoiceRecordingByPath(filePath: String): VoiceRecordingEntity?
 }
 
 @Database(
@@ -91,9 +120,10 @@ interface WorkspaceDao {
         TranscriptionSession::class,
         ChatMessage::class,
         FlashcardMasteryEntity::class,
-        QuizScoreEntity::class
+        QuizScoreEntity::class,
+        VoiceRecordingEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -120,6 +150,23 @@ abstract class AppDatabase : RoomDatabase() {
                         `totalQuestions` INTEGER NOT NULL,
                         `percentage` INTEGER NOT NULL,
                         `timestamp` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `voice_recordings` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `filePath` TEXT NOT NULL,
+                        `durationSeconds` INTEGER NOT NULL,
+                        `sizeBytes` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL
                     )
                     """.trimIndent()
                 )
